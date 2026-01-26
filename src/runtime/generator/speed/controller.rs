@@ -378,11 +378,11 @@ mod tests {
         assert_eq!(ctrl.current_speed(), 1000);
 
         // 等待进入第二阶段
-        sleep(Duration::from_millis(350));
+        sleep(Duration::from_millis(500));
         assert_eq!(ctrl.current_speed(), 2000);
 
         // 循环回到第一阶段
-        sleep(Duration::from_millis(350));
+        sleep(Duration::from_millis(500));
         assert_eq!(ctrl.current_speed(), 1000);
     }
 

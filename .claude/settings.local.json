@@ -26,7 +26,10 @@
       "Bash(cargo tree:*)",
       "Bash(cargo audit:*)",
       "Bash(ls:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "WebFetch(domain:docs.oasis-open.org)",
+      "WebFetch(domain:www.elastic.co)",
+      "Bash(rustc:*)"
     ]
   }
 }

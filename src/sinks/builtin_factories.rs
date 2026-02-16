@@ -1,3 +1,4 @@
+use crate::sinks::backends::arrow_ipc::ArrowIpcFactory;
 use crate::sinks::backends::blackhole::BlackHoleSink;
 use crate::sinks::backends::blackhole_factory::BlackHoleFactory;
 use crate::sinks::backends::file_factory::FileFactory;
@@ -7,6 +8,7 @@ use crate::sinks::backends::test_rescue::TestRescueFactory;
 use wp_conf::connectors::{ConnectorDef, SinkDefProvider};
 
 pub fn register_builtin_factories() {
+    crate::connectors::registry::register_sink_factory(ArrowIpcFactory);
     crate::connectors::registry::register_sink_factory(BlackHoleFactory);
     crate::connectors::registry::register_sink_factory(FileFactory);
     crate::connectors::registry::register_sink_factory(SyslogFactory);
@@ -16,6 +18,7 @@ pub fn register_builtin_factories() {
 
 pub fn builtin_sink_defs() -> Vec<ConnectorDef> {
     let mut defs = Vec::new();
+    defs.append(&mut ArrowIpcFactory.sink_defs());
     defs.append(&mut BlackHoleFactory.sink_defs());
     defs.append(&mut FileFactory.sink_defs());
     defs.append(&mut SyslogFactory.sink_defs());

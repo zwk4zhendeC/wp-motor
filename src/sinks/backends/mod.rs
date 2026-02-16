@@ -1,3 +1,4 @@
+pub mod arrow_ipc;
 pub mod blackhole;
 pub mod blackhole_factory;
 pub mod file;

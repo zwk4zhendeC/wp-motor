@@ -185,6 +185,7 @@ wp_ctrl_api = { workspace = true }
 wp_enrich_api = { workspace = true }
 wp-specs = { workspace = true }
 wp-data-fmt = { workspace = true }
+wp-arrow = { workspace = true }
 
 # Note: Do NOT depend on wp-cli here to avoid circular dependencies
 
@@ -201,6 +202,7 @@ shadow-rs = "1.5"
 
 [patch.crates-io]
 include-flate-codegen = { path = "patches/include-flate-codegen" }
+wp-model-core = { path = "../wp-model-core" }
 
 [dev-dependencies]
 serial_test = "3"
@@ -384,6 +386,8 @@ wp_parser = { package = "wp-parser", path = "./crates/wp-parser" }
 wp_proj = { package = "wp-proj", path = "./crates/wp-proj" }
 wp_stats = { package = "wp-stats", path = "./crates/wp-stats" }
 
+# --- External: Arrow ---
+wp-arrow = { path = "../wp-arrow" }
 
 # --- External: Open API (Public Interfaces) ---
 wp-connector-api = "0.7"

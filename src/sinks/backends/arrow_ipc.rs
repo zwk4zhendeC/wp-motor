@@ -1,10 +1,11 @@
-use std::path::Path;
-use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use orion_conf::ErrorOwe;
 use serde_json::json;
-use tokio::io::{AsyncWrite, AsyncWriteExt};
+use std::sync::Arc;
+use tokio::io::AsyncWriteExt;
+use tokio::net::tcp::OwnedWriteHalf;
 use wp_arrow::convert::records_to_batch;
 use wp_arrow::ipc::encode_ipc;
 use wp_arrow::schema::{FieldDef, parse_wp_type};
@@ -17,38 +18,23 @@ use wp_connector_api::{
 use wp_model_core::model::DataRecord;
 
 // ---------------------------------------------------------------------------
-// Target address parsing
+// Target address parsing (TCP only)
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Target {
-    Unix(String),
-    Tcp(String, u16),
-}
-
-fn parse_target(s: &str) -> anyhow::Result<Target> {
-    if let Some(path) = s.strip_prefix("unix://") {
-        if path.is_empty() {
-            anyhow::bail!("unix:// target must include a socket path");
-        }
-        Ok(Target::Unix(path.to_string()))
-    } else if let Some(addr) = s.strip_prefix("tcp://") {
-        let (host, port) = addr
-            .rsplit_once(':')
-            .ok_or_else(|| anyhow::anyhow!("tcp:// target must be tcp://host:port"))?;
-        let port: u16 = port
-            .parse()
-            .map_err(|_| anyhow::anyhow!("invalid port in tcp:// target"))?;
-        if host.is_empty() {
-            anyhow::bail!("tcp:// target must include a host");
-        }
-        Ok(Target::Tcp(host.to_string(), port))
-    } else {
-        anyhow::bail!(
-            "unsupported target scheme: must start with unix:// or tcp://, got: {}",
-            s
-        );
+fn parse_target(s: &str) -> anyhow::Result<(String, u16)> {
+    let addr = s
+        .strip_prefix("tcp://")
+        .ok_or_else(|| anyhow::anyhow!("target must start with tcp://, got: {s}"))?;
+    let (host, port) = addr
+        .rsplit_once(':')
+        .ok_or_else(|| anyhow::anyhow!("tcp:// target must be tcp://host:port"))?;
+    let port: u16 = port
+        .parse()
+        .map_err(|_| anyhow::anyhow!("invalid port in tcp:// target"))?;
+    if host.is_empty() {
+        anyhow::bail!("tcp:// target must include a host");
     }
+    Ok((host.to_string(), port))
 }
 
 // ---------------------------------------------------------------------------
@@ -85,28 +71,25 @@ fn parse_fields_from_params(params: &ParamMap) -> anyhow::Result<Vec<FieldDef>> 
 }
 
 // ---------------------------------------------------------------------------
-// source_id persistence
+// Backoff constants
 // ---------------------------------------------------------------------------
 
-fn load_or_create_source_id(work_root: &Path) -> std::io::Result<u64> {
-    let path = work_root.join(".source_id");
-    if path.exists() {
-        let bytes = std::fs::read(&path)?;
-        if bytes.len() < 8 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "source_id file is too short",
-            ));
-        }
-        Ok(u64::from_le_bytes(bytes[..8].try_into().unwrap()))
-    } else {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let id: u64 = rand::random();
-        std::fs::write(&path, id.to_le_bytes())?;
-        Ok(id)
-    }
+const BACKOFF_INITIAL: Duration = Duration::from_secs(1);
+const BACKOFF_MAX: Duration = Duration::from_secs(30);
+
+// ---------------------------------------------------------------------------
+// ConnState
+// ---------------------------------------------------------------------------
+
+enum ConnState {
+    Connected {
+        writer: OwnedWriteHalf,
+    },
+    Disconnected {
+        next_attempt: tokio::time::Instant,
+        backoff: Duration,
+    },
+    Stopped,
 }
 
 // ---------------------------------------------------------------------------
@@ -114,69 +97,121 @@ fn load_or_create_source_id(work_root: &Path) -> std::io::Result<u64> {
 // ---------------------------------------------------------------------------
 
 pub struct ArrowIpcSink {
-    stream: Box<dyn AsyncWrite + Unpin + Send + Sync>,
+    conn: ConnState,
+    host: String,
+    port: u16,
     tag: String,
     field_defs: Vec<FieldDef>,
-    source_id: u64,
-    batch_seq: u64,
     sent_cnt: u64,
 }
 
 impl ArrowIpcSink {
     async fn connect(
-        target: &Target,
+        host: &str,
+        port: u16,
         tag: String,
         field_defs: Vec<FieldDef>,
-        source_id: u64,
     ) -> anyhow::Result<Self> {
-        let stream: Box<dyn AsyncWrite + Unpin + Send + Sync> = match target {
-            Target::Unix(path) => {
-                let s = tokio::net::UnixStream::connect(path).await?;
-                Box::new(s)
-            }
-            Target::Tcp(host, port) => {
-                let addr = format!("{}:{}", host, port);
-                let s = tokio::net::TcpStream::connect(&addr).await?;
-                Box::new(s)
-            }
-        };
-        log::info!("arrow_ipc sink connected: target={:?}", target);
+        let addr = format!("{host}:{port}");
+        let stream = tokio::net::TcpStream::connect(&addr).await?;
+        let (_reader, writer) = stream.into_split();
+
+        log::info!("arrow_ipc sink connected: tcp://{addr}");
+
         Ok(Self {
-            stream,
+            conn: ConnState::Connected { writer },
+            host: host.to_string(),
+            port,
             tag,
             field_defs,
-            source_id,
-            batch_seq: 0,
             sent_cnt: 0,
         })
     }
 
+    fn enter_disconnected(&mut self) {
+        self.conn = ConnState::Disconnected {
+            next_attempt: tokio::time::Instant::now() + BACKOFF_INITIAL,
+            backoff: BACKOFF_INITIAL,
+        };
+        log::warn!("arrow_ipc sink disconnected, will retry");
+    }
+
+    async fn try_reconnect(&mut self) {
+        let addr = format!("{}:{}", self.host, self.port);
+        match tokio::net::TcpStream::connect(&addr).await {
+            Ok(stream) => {
+                let (_reader, writer) = stream.into_split();
+                self.conn = ConnState::Connected { writer };
+                log::info!("arrow_ipc sink reconnected: tcp://{addr}");
+            }
+            Err(e) => {
+                if let ConnState::Disconnected {
+                    ref mut next_attempt,
+                    ref mut backoff,
+                } = self.conn
+                {
+                    *backoff = (*backoff * 2).min(BACKOFF_MAX);
+                    *next_attempt = tokio::time::Instant::now() + *backoff;
+                }
+                log::debug!("arrow_ipc sink reconnect failed: {e}");
+            }
+        }
+    }
+
+    /// Send a single length-prefixed frame: [4B BE u32 len][payload].
+    async fn send_frame(&mut self, payload: &[u8]) -> std::io::Result<()> {
+        if let ConnState::Connected { ref mut writer } = self.conn {
+            let frame_len = payload.len() as u32;
+            writer.write_all(&frame_len.to_be_bytes()).await?;
+            writer.write_all(payload).await?;
+            writer.flush().await?;
+            Ok(())
+        } else {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::NotConnected,
+                "not connected",
+            ))
+        }
+    }
+
     async fn send_batch(&mut self, records: &[DataRecord]) -> SinkResult<()> {
-        self.batch_seq += 1;
-
         let batch = records_to_batch(records, &self.field_defs)
-            .map_err(|e| anyhow::anyhow!("{}", e))
+            .map_err(|e| anyhow::anyhow!("{e}"))
             .owe_res()?;
 
-        let payload = encode_ipc(self.source_id, self.batch_seq, &self.tag, &batch)
-            .map_err(|e| anyhow::anyhow!("{}", e))
+        let payload = encode_ipc(&self.tag, &batch)
+            .map_err(|e| anyhow::anyhow!("{e}"))
             .owe_res()?;
 
-        // Length-prefixed frame: [4 bytes LE u32] [payload]
-        let frame_len = payload.len() as u32;
-        self.stream
-            .write_all(&frame_len.to_le_bytes())
-            .await
-            .owe_res()?;
-        self.stream.write_all(&payload).await.owe_res()?;
-        self.stream.flush().await.owe_res()?;
+        // Send based on connection state
+        match self.conn {
+            ConnState::Connected { .. } => {
+                if let Err(e) = self.send_frame(&payload).await {
+                    log::warn!("arrow_ipc send error: {e}");
+                    self.enter_disconnected();
+                }
+            }
+            ConnState::Disconnected { next_attempt, .. } => {
+                if tokio::time::Instant::now() >= next_attempt {
+                    self.try_reconnect().await;
+                    // If reconnected, try to send this batch
+                    if matches!(self.conn, ConnState::Connected { .. })
+                        && let Err(e) = self.send_frame(&payload).await
+                    {
+                        log::warn!("arrow_ipc send error after reconnect: {e}");
+                        self.enter_disconnected();
+                    }
+                }
+                // Data is dropped if disconnected — no WAL
+            }
+            ConnState::Stopped => {}
+        }
 
         self.sent_cnt = self.sent_cnt.saturating_add(1);
         if self.sent_cnt == 1 {
             log::info!(
-                "arrow_ipc sink first-send: tag={} batch_seq={} rows={} payload_bytes={}",
+                "arrow_ipc sink first-send: tag={} rows={} payload_bytes={}",
                 self.tag,
-                self.batch_seq,
                 records.len(),
                 payload.len(),
             );
@@ -188,13 +223,21 @@ impl ArrowIpcSink {
 #[async_trait]
 impl AsyncCtrl for ArrowIpcSink {
     async fn stop(&mut self) -> SinkResult<()> {
-        self.stream.flush().await.owe_res()?;
-        self.stream.shutdown().await.owe_res()?;
+        let old = std::mem::replace(&mut self.conn, ConnState::Stopped);
+        if let ConnState::Connected { mut writer } = old {
+            let _ = writer.flush().await;
+            let _ = writer.shutdown().await;
+        }
         Ok(())
     }
 
     async fn reconnect(&mut self) -> SinkResult<()> {
-        // M05 will implement reconnect logic
+        // Reset backoff and attempt immediately
+        self.conn = ConnState::Disconnected {
+            next_attempt: tokio::time::Instant::now(),
+            backoff: BACKOFF_INITIAL,
+        };
+        self.try_reconnect().await;
         Ok(())
     }
 }
@@ -214,7 +257,6 @@ impl AsyncRecordSink for ArrowIpcSink {
 #[async_trait]
 impl AsyncRawDataSink for ArrowIpcSink {
     async fn sink_str(&mut self, _data: &str) -> SinkResult<()> {
-        // Arrow IPC sink only handles structured DataRecords; raw data is ignored.
         Ok(())
     }
 
@@ -262,18 +304,14 @@ impl SinkFactory for ArrowIpcFactory {
         Ok(())
     }
 
-    async fn build(
-        &self,
-        spec: &ResolvedSinkSpec,
-        ctx: &SinkBuildCtx,
-    ) -> SinkResult<SinkHandle> {
+    async fn build(&self, spec: &ResolvedSinkSpec, _ctx: &SinkBuildCtx) -> SinkResult<SinkHandle> {
         let target_str = spec
             .params
             .get("target")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("missing required param: target"))
             .owe_conf()?;
-        let target = parse_target(target_str).owe_conf()?;
+        let (host, port) = parse_target(target_str).owe_conf()?;
 
         let tag = spec
             .params
@@ -284,9 +322,8 @@ impl SinkFactory for ArrowIpcFactory {
             .to_string();
 
         let field_defs = parse_fields_from_params(&spec.params).owe_conf()?;
-        let source_id = load_or_create_source_id(&ctx.work_root).owe_res()?;
 
-        let sink = ArrowIpcSink::connect(&target, tag, field_defs, source_id)
+        let sink = ArrowIpcSink::connect(&host, port, tag, field_defs)
             .await
             .owe_res()?;
         Ok(SinkHandle::new(Box::new(sink)))
@@ -296,7 +333,7 @@ impl SinkFactory for ArrowIpcFactory {
 impl SinkDefProvider for ArrowIpcFactory {
     fn sink_def(&self) -> ConnectorDef {
         let mut params = ParamMap::new();
-        params.insert("target".into(), json!("unix:///var/run/warpfusion.sock"));
+        params.insert("target".into(), json!("tcp://127.0.0.1:9800"));
         params.insert("tag".into(), json!("default"));
         params.insert("fields".into(), json!([]));
         ConnectorDef {
@@ -317,21 +354,17 @@ impl SinkDefProvider for ArrowIpcFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::AsyncReadExt;
 
     // -----------------------------------------------------------------------
     // parse_target
     // -----------------------------------------------------------------------
 
     #[test]
-    fn parse_target_unix() {
-        let t = parse_target("unix:///var/run/warpfusion.sock").unwrap();
-        assert_eq!(t, Target::Unix("/var/run/warpfusion.sock".into()));
-    }
-
-    #[test]
     fn parse_target_tcp() {
-        let t = parse_target("tcp://127.0.0.1:9800").unwrap();
-        assert_eq!(t, Target::Tcp("127.0.0.1".into(), 9800));
+        let (host, port) = parse_target("tcp://127.0.0.1:9800").unwrap();
+        assert_eq!(host, "127.0.0.1");
+        assert_eq!(port, 9800);
     }
 
     #[test]
@@ -340,8 +373,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_target_unix_empty_path() {
-        assert!(parse_target("unix://").is_err());
+    fn parse_target_unix_rejected() {
+        assert!(parse_target("unix:///var/run/test.sock").is_err());
     }
 
     #[test]
@@ -402,61 +435,41 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // source_id persistence
+    // Helper: read one length-prefixed frame from a reader (BE u32)
     // -----------------------------------------------------------------------
 
-    #[test]
-    fn source_id_persistence() {
-        let dir = tempfile::tempdir().unwrap();
-        let id1 = load_or_create_source_id(dir.path()).unwrap();
-        let id2 = load_or_create_source_id(dir.path()).unwrap();
-        assert_eq!(id1, id2);
-    }
-
-    #[test]
-    fn source_id_stable_across_calls() {
-        let dir = tempfile::tempdir().unwrap();
-        let ids: Vec<u64> = (0..5)
-            .map(|_| load_or_create_source_id(dir.path()).unwrap())
-            .collect();
-        assert!(ids.windows(2).all(|w| w[0] == w[1]));
+    async fn read_one_frame(reader: &mut (impl AsyncReadExt + Unpin)) -> Option<Vec<u8>> {
+        let mut len_buf = [0u8; 4];
+        reader.read_exact(&mut len_buf).await.ok()?;
+        let frame_len = u32::from_be_bytes(len_buf) as usize;
+        let mut payload = vec![0u8; frame_len];
+        reader.read_exact(&mut payload).await.ok()?;
+        Some(payload)
     }
 
     // -----------------------------------------------------------------------
-    // Integration: roundtrip via Unix socket
+    // Integration: roundtrip via TCP
     // -----------------------------------------------------------------------
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn sink_records_roundtrip_unix() {
-        use tokio::io::AsyncReadExt;
+    async fn sink_records_roundtrip_tcp() {
         use wp_arrow::ipc::decode_ipc;
         use wp_model_core::model::{Field, FieldStorage};
 
-        let dir = tempfile::tempdir().unwrap();
-        let sock_path = dir.path().join("test.sock");
-        let listener = tokio::net::UnixListener::bind(&sock_path).unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
 
-        let sock_path_str = sock_path.to_string_lossy().to_string();
         let srv = tokio::spawn(async move {
             let (mut conn, _) = listener.accept().await.unwrap();
-            // Read length prefix
-            let mut len_buf = [0u8; 4];
-            conn.read_exact(&mut len_buf).await.unwrap();
-            let frame_len = u32::from_le_bytes(len_buf) as usize;
-            // Read payload
-            let mut payload = vec![0u8; frame_len];
-            conn.read_exact(&mut payload).await.unwrap();
-            payload
+            read_one_frame(&mut conn).await.unwrap()
         });
 
-        let source_id = load_or_create_source_id(dir.path()).unwrap();
         let field_defs = vec![
             FieldDef::new("name", wp_arrow::schema::WpDataType::Chars),
             FieldDef::new("count", wp_arrow::schema::WpDataType::Digit),
         ];
 
-        let target = Target::Unix(sock_path_str);
-        let mut sink = ArrowIpcSink::connect(&target, "test-tag".into(), field_defs, source_id)
+        let mut sink = ArrowIpcSink::connect("127.0.0.1", port, "test-tag".into(), field_defs)
             .await
             .unwrap();
 
@@ -468,20 +481,17 @@ mod tests {
 
         let payload = srv.await.unwrap();
         let frame = decode_ipc(&payload).unwrap();
-        assert_eq!(frame.source_id, source_id);
-        assert_eq!(frame.batch_seq, 1);
         assert_eq!(frame.tag, "test-tag");
         assert_eq!(frame.batch.num_rows(), 1);
         assert_eq!(frame.batch.num_columns(), 2);
     }
 
     // -----------------------------------------------------------------------
-    // Integration: roundtrip via TCP
+    // Integration: multiple batches
     // -----------------------------------------------------------------------
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn sink_records_roundtrip_tcp() {
-        use tokio::io::AsyncReadExt;
+    async fn sink_records_multiple_batches() {
         use wp_arrow::ipc::decode_ipc;
         use wp_model_core::model::{Field, FieldStorage};
 
@@ -490,70 +500,17 @@ mod tests {
 
         let srv = tokio::spawn(async move {
             let (mut conn, _) = listener.accept().await.unwrap();
-            let mut len_buf = [0u8; 4];
-            conn.read_exact(&mut len_buf).await.unwrap();
-            let frame_len = u32::from_le_bytes(len_buf) as usize;
-            let mut payload = vec![0u8; frame_len];
-            conn.read_exact(&mut payload).await.unwrap();
-            payload
-        });
-
-        let dir = tempfile::tempdir().unwrap();
-        let source_id = load_or_create_source_id(dir.path()).unwrap();
-        let field_defs = vec![
-            FieldDef::new("action", wp_arrow::schema::WpDataType::Chars),
-        ];
-
-        let target = Target::Tcp("127.0.0.1".into(), port);
-        let mut sink = ArrowIpcSink::connect(&target, "tcp-tag".into(), field_defs, source_id)
-            .await
-            .unwrap();
-
-        let rec = DataRecord::from(vec![FieldStorage::from(Field::from_chars("action", "allow"))]);
-        sink.send_batch(&[rec]).await.unwrap();
-
-        let payload = srv.await.unwrap();
-        let frame = decode_ipc(&payload).unwrap();
-        assert_eq!(frame.source_id, source_id);
-        assert_eq!(frame.batch_seq, 1);
-        assert_eq!(frame.tag, "tcp-tag");
-        assert_eq!(frame.batch.num_rows(), 1);
-    }
-
-    // -----------------------------------------------------------------------
-    // batch_seq increments
-    // -----------------------------------------------------------------------
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn sink_records_batch_seq_increments() {
-        use tokio::io::AsyncReadExt;
-        use wp_arrow::ipc::decode_ipc;
-        use wp_model_core::model::{Field, FieldStorage};
-
-        let dir = tempfile::tempdir().unwrap();
-        let sock_path = dir.path().join("seq.sock");
-        let listener = tokio::net::UnixListener::bind(&sock_path).unwrap();
-
-        let sock_path_str = sock_path.to_string_lossy().to_string();
-        let srv = tokio::spawn(async move {
-            let (mut conn, _) = listener.accept().await.unwrap();
-            let mut seqs = Vec::new();
+            let mut tags = Vec::new();
             for _ in 0..3 {
-                let mut len_buf = [0u8; 4];
-                conn.read_exact(&mut len_buf).await.unwrap();
-                let frame_len = u32::from_le_bytes(len_buf) as usize;
-                let mut payload = vec![0u8; frame_len];
-                conn.read_exact(&mut payload).await.unwrap();
+                let payload = read_one_frame(&mut conn).await.unwrap();
                 let frame = decode_ipc(&payload).unwrap();
-                seqs.push(frame.batch_seq);
+                tags.push(frame.tag);
             }
-            seqs
+            tags
         });
 
-        let source_id = load_or_create_source_id(dir.path()).unwrap();
         let field_defs = vec![FieldDef::new("v", wp_arrow::schema::WpDataType::Chars)];
-        let target = Target::Unix(sock_path_str);
-        let mut sink = ArrowIpcSink::connect(&target, "seq".into(), field_defs, source_id)
+        let mut sink = ArrowIpcSink::connect("127.0.0.1", port, "multi".into(), field_defs)
             .await
             .unwrap();
 
@@ -562,8 +519,8 @@ mod tests {
             sink.send_batch(&[rec]).await.unwrap();
         }
 
-        let seqs = srv.await.unwrap();
-        assert_eq!(seqs, vec![1, 2, 3]);
+        let tags = srv.await.unwrap();
+        assert_eq!(tags, vec!["multi", "multi", "multi"]);
     }
 
     // -----------------------------------------------------------------------
@@ -572,37 +529,47 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn sink_empty_records() {
-        use tokio::io::AsyncReadExt;
         use wp_arrow::ipc::decode_ipc;
 
-        let dir = tempfile::tempdir().unwrap();
-        let sock_path = dir.path().join("empty.sock");
-        let listener = tokio::net::UnixListener::bind(&sock_path).unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
 
-        let sock_path_str = sock_path.to_string_lossy().to_string();
         let srv = tokio::spawn(async move {
             let (mut conn, _) = listener.accept().await.unwrap();
-            let mut len_buf = [0u8; 4];
-            conn.read_exact(&mut len_buf).await.unwrap();
-            let frame_len = u32::from_le_bytes(len_buf) as usize;
-            let mut payload = vec![0u8; frame_len];
-            conn.read_exact(&mut payload).await.unwrap();
-            payload
+            read_one_frame(&mut conn).await.unwrap()
         });
 
-        let source_id = load_or_create_source_id(dir.path()).unwrap();
         let field_defs = vec![FieldDef::new("x", wp_arrow::schema::WpDataType::Chars)];
-        let target = Target::Unix(sock_path_str);
-        let mut sink = ArrowIpcSink::connect(&target, "empty".into(), field_defs, source_id)
+        let mut sink = ArrowIpcSink::connect("127.0.0.1", port, "empty".into(), field_defs)
             .await
             .unwrap();
 
-        // Send empty records — should still produce a 0-row batch
         sink.send_batch(&[]).await.unwrap();
 
         let payload = srv.await.unwrap();
         let frame = decode_ipc(&payload).unwrap();
         assert_eq!(frame.batch.num_rows(), 0);
-        assert_eq!(frame.batch_seq, 1);
+    }
+
+    // -----------------------------------------------------------------------
+    // Backoff doubles then caps
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn backoff_doubles_then_caps() {
+        let mut backoff = BACKOFF_INITIAL;
+        let expected = [
+            Duration::from_secs(1),
+            Duration::from_secs(2),
+            Duration::from_secs(4),
+            Duration::from_secs(8),
+            Duration::from_secs(16),
+            Duration::from_secs(30),
+            Duration::from_secs(30),
+        ];
+        for &exp in &expected {
+            assert_eq!(backoff, exp);
+            backoff = (backoff * 2).min(BACKOFF_MAX);
+        }
     }
 }

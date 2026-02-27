@@ -529,7 +529,7 @@ impl SinkService {
 
         // 运行态名称使用 full_name = group/inner_name（配置装配阶段已注入 group_name）
         let full_name = conf.full_name();
-        let batch_size = sink_group.conf().batch_size();
+        let batch_size = conf.batch_size();
         sink_group.append(SinkRuntime::with_batch_size(
             rescue.clone(),
             full_name,

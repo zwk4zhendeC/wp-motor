@@ -384,13 +384,11 @@ impl SinkRuntime {
         // 将 package 中的数据添加到 buffer
         for unit in package.iter() {
             self.pending_records.push(unit.data().clone());
-
-            // 当 buffer 达到批次大小时自动 flush
-            if self.pending_records.len() >= self.batch_size {
-                self.flush_pending_buffer(bad_s, mon).await?;
-            }
         }
-
+        // 当 buffer 达到批次大小时自动 flush
+        if self.pending_records.len() >= self.batch_size {
+            self.flush_pending_buffer(bad_s, mon).await?;
+        }
         Ok(())
     }
 

@@ -1,4 +1,5 @@
 use super::expect::SinkExpectOverride;
+use crate::structure::default_batch_size;
 use crate::types::AnyResult;
 use crate::utils::{env_eval_params, env_eval_vec};
 use crate::{cond::WarpConditionParser, structure::Validate};
@@ -8,6 +9,7 @@ use orion_conf::{ErrorOwe, ErrorWith, ToStructError};
 use orion_error::{ContextRecord, OperationContext, UvsValidationFrom};
 use orion_variate::EnvEvaluable;
 use serde::{Deserialize, Serialize};
+use winnow::stream::ToUsize;
 use std::fs;
 use std::path::Path;
 use wp_conf_base::ConfParser;
@@ -173,6 +175,16 @@ impl SinkInstanceConf {
             Some(g) if !g.is_empty() => format!("{}/{}", g, self.core.name),
             _ => self.core.name.clone(),
         }
+    }
+
+    pub fn batch_size(&self) -> usize {
+        let mut batch_size=default_batch_size();
+        if let Some(buffer_size) = self.core.params.get("batch_size")
+            && let Some(size) = buffer_size.as_u64()
+        {
+            batch_size= size.to_usize();
+        }
+        batch_size
     }
 }
 

@@ -5,12 +5,14 @@ use wp_conf::limits::sink_channel_cap;
 use crate::resources::SinkResUnit;
 use crate::sinks::SinkRuntime;
 use crate::sinks::{ASinkSender, SinkDatYReceiver, SinkDatYSender, SinkPackage, SinkRecUnit};
+use crate::stat::metric_collect::MetricCollectors;
 use crate::stat::MonSend;
 use derive_getters::Getters;
 use orion_overload::append::Appendable;
 use wp_conf::structure::SinkGroupConf;
-use wp_connector_api::SinkResult;
+use wp_connector_api::{SinkError, SinkReason, SinkResult};
 use wp_data_model::cache::FieldQueryCache;
+use wp_stat::StatReq;
 
 // split internal helpers
 
@@ -56,12 +58,15 @@ pub struct SinkDispatcher {
     dat_r: SinkDatYReceiver,
     res: SinkResUnit,
     unit_pool: SinkRecUnitPool,
+    ingress_target: String,
+    ingress_stat: MetricCollectors,
 }
 
 impl SinkDispatcher {
     pub fn new(conf: SinkGroupConf, res: SinkResUnit) -> Self {
         // 改用 tokio::mpsc 事件化通道，便于与 runtime 协作
         let (dat_s, dat_r) = tokio::sync::mpsc::channel(sink_channel_cap());
+        let ingress_target = format!("{}@recv", conf.name());
         Self {
             conf,
             sinks: Vec::new(),
@@ -69,8 +74,36 @@ impl SinkDispatcher {
             dat_r,
             res,
             unit_pool: SinkRecUnitPool::new(),
+            ingress_stat: MetricCollectors::new(ingress_target.clone(), Vec::new()),
+            ingress_target,
         }
     }
+    pub fn set_ingress_stat_target(
+        &mut self,
+        replica_idx: usize,
+        replica_cnt: usize,
+        stat_reqs: Vec<StatReq>,
+    ) {
+        self.ingress_target = if replica_cnt > 1 {
+            format!("{}#{}@recv", self.conf.name(), replica_idx)
+        } else {
+            format!("{}@recv", self.conf.name())
+        };
+        self.ingress_stat = MetricCollectors::new(self.ingress_target.clone(), stat_reqs);
+    }
+
+    pub fn record_ingress_batch(&mut self, count: usize) {
+        self.ingress_stat
+            .record_task_batch(self.ingress_target.as_str(), count);
+    }
+
+    pub async fn send_ingress_stat(&mut self, mon_send: &MonSend) -> SinkResult<()> {
+        self.ingress_stat
+            .send_stat(mon_send)
+            .await
+            .map_err(|e| SinkError::from(SinkReason::Sink(e.to_string())))
+    }
+
     pub fn get_dat_r_mut(&mut self) -> &mut SinkDatYReceiver {
         &mut self.dat_r
     }

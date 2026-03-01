@@ -1,6 +1,7 @@
 use crate::facade::test_helpers::SinkTerminal;
 use crate::runtime::actor::command::{CmdSubscriber, TaskController, TaskEndReason};
 use crate::sinks::{ProcMeta, RescueEntry, RescuePayload, SinkRouteAgent};
+use wp_connector_api::{SinkError, SinkReason, SinkResult};
 use crate::stat::metric_collect::MetricCollectors;
 use crate::stat::{MonSend, STAT_INTERVAL_MS};
 use chrono::NaiveDateTime;
@@ -117,46 +118,44 @@ impl ActCovPicker {
         stat_reqs: Vec<StatReq>,
     ) -> RunResult<()> {
         let sink_name = Self::get_sink_name(paths.as_str());
-        if let Some((sink_agent, sink_kind)) = route_agent.get_sink_agent(sink_name.as_str()) {
-            //所有sink 都在运行,并没有逻辑上的问题!?
-            /*
-            self.cmd_pub
-                .broadcast(CtrlCmd::Work(DoScope::One(sink_name.clone())))
-                .await?;
-                */
-            sleep(std::time::Duration::from_millis(100)).await;
-            info_dfx!("recover file: {}", paths);
-            match self
-                .pick_file(
-                    sink_agent,
-                    &paths,
-                    self.speed_limit,
-                    check_point,
-                    sink_kind,
-                    stat_reqs,
-                )
-                .await?
-            {
-                TaskEndReason::SucEnded => {
-                    info_dfx!("recover end");
-                }
-                TaskEndReason::Interrupt => {
-                    info_dfx!("recover interrupt");
-                }
-            }
-        } else {
+        let sink_agents = route_agent.get_sink_agents(sink_name.as_str());
+        if sink_agents.is_empty() {
             error_dfx!("no sink agent for {}", sink_name);
+            return Ok(());
+        }
+
+        //所有sink 都在运行,并没有逻辑上的问题!?
+        /*
+        self.cmd_pub
+            .broadcast(CtrlCmd::Work(DoScope::One(sink_name.clone())))
+            .await?;
+            */
+        sleep(std::time::Duration::from_millis(100)).await;
+        info_dfx!(
+            "recover file: {}, sink candidates: {}",
+            paths,
+            sink_agents.len()
+        );
+        match self
+            .pick_file(sink_agents, &paths, self.speed_limit, check_point, stat_reqs)
+            .await?
+        {
+            TaskEndReason::SucEnded => {
+                info_dfx!("recover end");
+            }
+            TaskEndReason::Interrupt => {
+                info_dfx!("recover interrupt");
+            }
         }
         Ok(())
     }
 
     async fn pick_file(
         &self,
-        dat_s: SinkTerminal,
+        sink_agents: Vec<SinkTerminal>,
         file_path: &String,
         speed: usize,
         check_point: &mut CheckPoint,
-        _sink_kind: String,
         stat_reqs: Vec<StatReq>,
     ) -> RunResult<TaskEndReason> {
         let mut run_ctrl = TaskController::from_speed_limit(
@@ -173,7 +172,12 @@ impl ActCovPicker {
         let mut reader = BufReader::new(file);
         #[allow(unused_assignments)]
         let mut end_reason = TaskEndReason::Interrupt;
-        info_dfx!("recover begin! file : {}", file_path);
+        let mut active_sink_idx: usize = 0;
+        info_dfx!(
+            "recover begin! file : {}, sink candidates: {}",
+            file_path,
+            sink_agents.len()
+        );
         loop {
             run_ctrl.rec_task_unit_reset();
             while !run_ctrl.is_unit_end() {
@@ -194,16 +198,12 @@ impl ActCovPicker {
                 }
 
                 let entry = RescueEntry::parse(trimmed).owe_data()?;
-                match entry.into_payload() {
-                    RescuePayload::Record { record } => {
-                        dat_s
-                            .send_record(0, ProcMeta::Null, Arc::new(record))
-                            .owe_sink()?;
-                    }
-                    RescuePayload::Raw { raw } => {
-                        dat_s.send_raw(0, raw).owe_sink()?;
-                    }
-                }
+                Self::send_payload_with_failover(
+                    &sink_agents,
+                    &mut active_sink_idx,
+                    entry.into_payload(),
+                )
+                .owe_sink()?;
                 stat.record_end(file_path.as_str(), None);
                 run_ctrl.rec_task_suc();
                 check_point.rec_suc(file_path);
@@ -233,6 +233,67 @@ impl ActCovPicker {
         check_point.save_point().owe_sys()?;
         stat.send_stat(&self.mon_s).await.owe_res()?;
         Ok(end_reason)
+    }
+
+    fn send_payload_with_failover(
+        sink_agents: &[SinkTerminal],
+        active_sink_idx: &mut usize,
+        payload: RescuePayload,
+    ) -> SinkResult<()> {
+        match payload {
+            RescuePayload::Record { record } => {
+                let record = Arc::new(record);
+                Self::send_with_failover(sink_agents, active_sink_idx, |sink| {
+                    sink.send_record(0, ProcMeta::Null, Arc::clone(&record))
+                })
+            }
+            RescuePayload::Raw { raw } => {
+                Self::send_with_failover(sink_agents, active_sink_idx, |sink| {
+                    sink.send_raw(0, raw.clone())
+                })
+            }
+        }
+    }
+
+    fn send_with_failover<F>(
+        sink_agents: &[SinkTerminal],
+        active_sink_idx: &mut usize,
+        mut send_fn: F,
+    ) -> SinkResult<()>
+    where
+        F: FnMut(&SinkTerminal) -> SinkResult<()>,
+    {
+        if sink_agents.is_empty() {
+            return Err(SinkError::from(SinkReason::Sink(
+                "no sink candidates for recovery".to_string(),
+            )));
+        }
+
+        let total = sink_agents.len();
+        let mut last_error = None;
+        for _ in 0..total {
+            let idx = *active_sink_idx % total;
+            let sink = &sink_agents[idx];
+            match send_fn(sink) {
+                Ok(()) => {
+                    *active_sink_idx = idx;
+                    return Ok(());
+                }
+                Err(err) => {
+                    let next_idx = (idx + 1) % total;
+                    warn_dfx!(
+                        "recover send failed on sink idx {}, switching to idx {}: {}",
+                        idx,
+                        next_idx,
+                        err
+                    );
+                    last_error = Some(err);
+                    *active_sink_idx = next_idx;
+                }
+            }
+        }
+
+        Err(last_error.expect("last_error should exist when all candidates fail"))
     }
 
     fn get_sink_name(path: &str) -> String {

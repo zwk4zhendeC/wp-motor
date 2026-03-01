@@ -25,12 +25,32 @@ impl SinkRouteAgent {
     pub fn null() -> Self {
         Self { items: Vec::new() }
     }
-    pub fn get_sink_agent(&self, sink_name: &str) -> Option<(SinkTerminal, String)> {
-        for i in self.items.iter() {
-            for sink in i.conf().sinks() {
+
+    pub fn from_items(items: Vec<SinkGroupAgent>) -> Self {
+        Self { items }
+    }
+
+    pub fn get_sink_agents(&self, sink_name: &str) -> Vec<SinkTerminal> {
+        let mut candidates = Vec::new();
+        for item in &self.items {
+            for sink in item.conf().sinks() {
                 if sink.name().eq(sink_name) {
-                    // 返回运行期终端与 sink 的 kind 字符串，避免上层直接依赖 SinksEnum
-                    return Some((i.end().clone(), sink.resolved_kind_str()));
+                    candidates.push(item.end().clone());
+                }
+            }
+        }
+
+        candidates
+    }
+
+    pub fn get_sink_agent(&self, sink_name: &str) -> Option<(SinkTerminal, String)> {
+        let sink = self.get_sink_agents(sink_name).into_iter().next()?;
+
+        // 保留原接口语义：返回该 sink_name 对应的 kind（首个匹配项）
+        for item in &self.items {
+            for conf in item.conf().sinks() {
+                if conf.name().eq(sink_name) {
+                    return Some((sink, conf.resolved_kind_str()));
                 }
             }
         }
@@ -109,12 +129,13 @@ pub trait RouteConfAble {
     fn is_match(&self, rule: &str) -> Option<usize>;
 }
 
-fn rout_impl<T>(items: &Vec<T>, target_rule: &str) -> Option<SinkGroupAgent>
+fn rout_impl<T>(items: &[T], target_rule: &str) -> Option<SinkGroupAgent>
 where
     T: RouteConfAble,
 {
     let mut found: Option<SinkGroupAgent> = None;
     let mut max_match = 0;
+
     for ins in items {
         if let Some(match_len) = ins.is_match(target_rule)
             && match_len > max_match

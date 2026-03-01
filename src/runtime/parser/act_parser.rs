@@ -20,7 +20,6 @@ use wpl::WparseResult;
 //#[derive(Clone)]
 pub struct ActParser {
     pub engine: WplEngine,
-    pub sinks: SinkRouteAgent,
 }
 
 impl ActParser {
@@ -29,31 +28,25 @@ impl ActParser {
     }
     pub async fn from_all_model(
         pipelines: Vec<WplPipeline>,
-        sinks: SinkRouteAgent,
+        _sinks: SinkRouteAgent,
         infra: InfraSinkAgent,
     ) -> RunResult<Self> {
         trace_ctrl!("setting depend");
         let pipe_lines = WplEngine::from(pipelines, infra).owe_conf()?;
         //let pipe_lines = ParseEngine::from(pipelines, infra).to_uvs::<ConfErrReader>()?;
-        Ok(ActParser {
-            engine: pipe_lines,
-            sinks,
-        })
+        Ok(ActParser { engine: pipe_lines })
     }
 
     pub fn from_normal(
         wpl_code: WplCodePKG,
-        sinks: SinkRouteAgent,
+        _sinks: SinkRouteAgent,
         infra: InfraSinkAgent,
         _stat_reqs: Vec<StatReq>,
     ) -> RunResult<Self> {
         trace_ctrl!("setting depend");
         let wpl_pkgs = WplRepository::from_wpl_tolerant(wpl_code, infra.error.end()).owe_rule()?;
         let pipe_lines = WplEngine::from_code(&wpl_pkgs, infra).owe_conf()?;
-        Ok(ActParser {
-            engine: pipe_lines,
-            sinks,
-        })
+        Ok(ActParser { engine: pipe_lines })
     }
 }
 

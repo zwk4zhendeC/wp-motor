@@ -174,6 +174,7 @@ impl SinkWork {
                 pkg_opt = sink.get_dat_r_mut().recv() => {
                     match pkg_opt {
                         Some(pkg) => {
+                            sink.record_ingress_batch(pkg.len());
                             let processed = sink
                                 .group_sink_package(pkg, &infra, &bad_sink_s, Some(&mon_send), &mut cache)
                                 .await?;
@@ -232,6 +233,7 @@ impl SinkWork {
                         for s in sinks.iter_mut() {
                             s.send_stat(&mon_send).await?;
                         }
+                        sink.send_ingress_stat(&mon_send).await?;
                     }
                 }
                 _ = flush_tick.tick() => {
@@ -251,6 +253,7 @@ impl SinkWork {
         for s in sinks.iter_mut() {
             s.send_stat(&mon_send).await?;
         }
+        sink.send_ingress_stat(&mon_send).await?;
         sink.proc_end().await?;
         info_ctrl!("{} async sinks proc end", sink_name);
         Ok(())
@@ -448,7 +451,7 @@ impl SinkService {
                 SinkTerminal::Channel(item.get_data_sender()),
             ));
         }
-        SinkRouteAgent { items }
+        SinkRouteAgent::from_items(items)
     }
     pub(crate) async fn async_sinks_spawn(
         rescue: String,
@@ -494,6 +497,7 @@ impl SinkService {
                 .alloc_sink_res(&SinkID::from(group_conf.name()))
                 .await?,
         );
+        sink_group.set_ingress_stat_target(replica_idx, replica_cnt, stat_reqs.to_owned());
         for conf in group_conf.sinks() {
             Self::init_sink_group(
                 rescue.clone(),

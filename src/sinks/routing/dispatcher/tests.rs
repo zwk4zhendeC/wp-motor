@@ -16,6 +16,7 @@ use wp_conf::structure::{FlexGroup, SinkGroupConf};
 use wp_data_model::cache::FieldQueryCache;
 use wp_model_core::model::fmt_def::TextFmt;
 use wp_model_core::model::{DataRecord, Value};
+use wp_stat::{ReportVariant, StatReq, StatStage, StatTarget};
 
 #[test]
 fn test_tags_injection_into_record() {
@@ -378,6 +379,46 @@ converted : chars = chars(done) ;
             }
         }
     }
+}
+
+#[test]
+fn ingress_stat_records_group_recv_batch() {
+    let mut group = FlexGroup::default();
+    group.name = "all_static".to_string();
+    let mut dispatcher = SinkDispatcher::new(SinkGroupConf::Flexi(group), SinkResUnit::use_null());
+    dispatcher.set_ingress_stat_target(
+        0,
+        2,
+        vec![StatReq {
+            stage: StatStage::Sink,
+            name: "sink_stat".to_string(),
+            target: StatTarget::All,
+            collect: Vec::new(),
+            max: 16,
+        }],
+    );
+    dispatcher.record_ingress_batch(7);
+
+    let rt = tokio::runtime::Runtime::new().expect("build runtime");
+    let (mon_tx, mut mon_rx) = tokio::sync::mpsc::channel(2);
+    rt.block_on(async {
+        dispatcher
+            .send_ingress_stat(&mon_tx)
+            .await
+            .expect("send ingress stat");
+    });
+    let report = rt.block_on(async {
+        match mon_rx.recv().await {
+            Some(ReportVariant::Stat(report)) => report,
+            None => panic!("missing ingress stat report"),
+        }
+    });
+
+    assert_eq!(report.get_name(), "sink_stat");
+    assert_eq!(report.target_display(), "all_static#0@recv");
+    assert_eq!(report.get_data().len(), 1);
+    assert_eq!(report.get_data()[0].stat.total, 7);
+    assert_eq!(report.get_data()[0].stat.success, 7);
 }
 
 // 隐私相关逻辑与字段已移除：对应行为测试一并删除

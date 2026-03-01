@@ -12,6 +12,7 @@ mod metric_aggregat;
 pub mod metric_collect;
 pub mod metric_set;
 pub mod reporting;
+pub mod runtime_counters;
 pub mod runtime_metric;
 //pub mod sink_stat;
 

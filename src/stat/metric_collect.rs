@@ -1,9 +1,11 @@
 use crate::stat::MonSend;
+use crate::stat::runtime_counters;
 use wp_stat::DataDim;
 use wp_stat::StatRecorder;
 use wp_stat::StatReq;
 
 use tokio::sync::mpsc::error::SendError;
+use tokio::sync::mpsc::error::TrySendError;
 use wp_data_fmt::{Raw, RecordFormatter};
 use wp_model_core::model::DataRecord;
 use wp_stat::ReportVariant;
@@ -129,15 +131,25 @@ impl MetricCollectors {
         for requ in self.items.iter_mut() {
             requ.finalize_with_time(batch_time);
             let slices = requ.collect_stat();
-            let r = mon_send.send(ReportVariant::Stat(slices)).await;
+            let r = mon_send.try_send(ReportVariant::Stat(slices));
             // 在 debug 构建下，监控通道关闭被视为严重错误，直接中断，利于尽快发现监控消费端未启动的问题。
             #[cfg(debug_assertions)]
             {
-                if let Err(e) = &r {
-                    debug_assert!(false, "monitor channel closed when sending stat: {}", e);
+                if let Err(TrySendError::Closed(e)) = &r {
+                    let _ = e;
+                    debug_assert!(false, "monitor channel closed when sending stat");
                 }
             }
-            r?;
+            match r {
+                Ok(()) => {}
+                Err(TrySendError::Full(_)) => {
+                    runtime_counters::rec_monitor_send_drop_full();
+                }
+                Err(TrySendError::Closed(s)) => {
+                    runtime_counters::rec_monitor_send_drop_closed();
+                    return Err(SendError(s));
+                }
+            }
         }
         Ok(())
     }

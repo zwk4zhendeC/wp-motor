@@ -4,7 +4,9 @@ use crate::facade::test_helpers::SinkTerminal;
 use crate::sinks::SinkGroupAgent;
 use crate::stat::MonSend;
 use crate::stat::metric_collect::MetricCollectors;
-use std::cmp::Ordering;
+use std::cmp::Ordering as CmpOrdering;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use wp_parse_api::{DataResult, RawData};
 use wp_stat::StatRecorder;
 use wp_stat::StatReq;
@@ -20,6 +22,7 @@ pub struct WplPipeline {
     pub access_cnt: usize,
     pub index: usize,
     output: Vec<SinkGroupAgent>,
+    send_rr: Arc<AtomicUsize>,
     wpl_key: String,
     s_name: String,
     stat_ext: MetricCollectors,
@@ -44,6 +47,7 @@ impl WplPipeline {
             index,
             wpl_key,
             output,
+            send_rr: Arc::new(AtomicUsize::new(0)),
             hit_cnt: 0,
             access_cnt: 0,
             s_name,
@@ -54,8 +58,13 @@ impl WplPipeline {
     pub fn short_name(&self) -> &str {
         self.s_name.as_str()
     }
+
+    fn next_output_index(&self) -> usize {
+        self.send_rr.fetch_add(1, AtomicOrdering::Relaxed) % self.output().len()
+    }
+
     pub fn get_rolled_end(&self) -> &SinkTerminal {
-        let idx = self.hit_cnt % self.output().len();
+        let idx = self.next_output_index();
         self.output[idx].end_point()
     }
     pub fn proc(&mut self, data: &SourceEvent, oth_suc_len: usize) -> DataResult {
@@ -98,7 +107,7 @@ impl PartialEq<Self> for WplPipeline {
 }
 
 impl PartialOrd<Self> for WplPipeline {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<CmpOrdering> {
         Some(self.cmp(other))
     }
 }
@@ -108,5 +117,55 @@ impl Ord for WplPipeline {
         let self_hit = OPTIMIZE_TIMES - self.hit_cnt;
         let other_hit = OPTIMIZE_TIMES - other.hit_cnt;
         self_hit.cmp(&other_hit)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wp_conf::structure::{FixedGroup, SinkGroupConf};
+
+    fn build_pipeline(output_cnt: usize) -> WplPipeline {
+        let evaluator = WplEvaluator::from_code("rule demo { ( _ ) }").expect("build wpl");
+        let mut output = Vec::with_capacity(output_cnt);
+        for _ in 0..output_cnt {
+            output.push(SinkGroupAgent::new(
+                SinkGroupConf::Fixed(FixedGroup::default_ins()),
+                SinkTerminal::null(),
+            ));
+        }
+        WplPipeline::new(
+            0,
+            "demo/rule".to_string(),
+            Vec::new(),
+            evaluator,
+            output,
+            Vec::new(),
+        )
+    }
+
+    #[test]
+    fn rolled_index_advances_by_one_per_send_and_ignores_hit_cnt() {
+        let mut p = build_pipeline(3);
+        p.hit_cnt = 100;
+        let first = p.next_output_index();
+
+        p.hit_cnt = 1;
+        let second = p.next_output_index();
+        let third = p.next_output_index();
+
+        assert_eq!((first + 1) % 3, second);
+        assert_eq!((second + 1) % 3, third);
+    }
+
+    #[test]
+    fn rolled_index_is_shared_across_clones() {
+        let p = build_pipeline(2);
+        let p2 = p.clone();
+
+        let first = p.next_output_index();
+        let second = p2.next_output_index();
+
+        assert_eq!((first + 1) % 2, second);
     }
 }

@@ -3,6 +3,7 @@
 use super::traits::{RecSyncSink, TrySendStatus};
 use crate::sample_log_with_hits;
 use crate::sinks::{SinkDataEnum, SinkPackage, SinkRecUnit};
+use crate::stat::runtime_counters;
 // stride uses crate::LOG_SAMPLE_STRIDE globally; no per-site stride import here
 use std::sync::Arc;
 use tokio::sync::mpsc::error::TrySendError;
@@ -31,6 +32,7 @@ impl RecSyncSink for SinkDatYSender {
             Err(TrySendError::Full(package)) => {
                 // Channel 满，提取数据返回
                 let unit = package.into_iter().next().unwrap();
+                runtime_counters::rec_sink_channel_full();
                 sample_log_with_hits!(
                     SINK_CH_FULL_HITS,
                     warn_mtrc,
@@ -41,9 +43,12 @@ impl RecSyncSink for SinkDatYSender {
                     SinkDataEnum::Rec(unit.meta().clone(), unit.data().clone()),
                 )
             }
-            Err(TrySendError::Closed(_)) => TrySendStatus::Err(Arc::new(SinkError::from(
-                SinkReason::Sink("sink channel closed".to_string()),
-            ))),
+            Err(TrySendError::Closed(_)) => {
+                runtime_counters::rec_sink_channel_closed();
+                TrySendStatus::Err(Arc::new(SinkError::from(SinkReason::Sink(
+                    "sink channel closed".to_string(),
+                ))))
+            }
         }
     }
 
@@ -53,6 +58,7 @@ impl RecSyncSink for SinkDatYSender {
         match self.try_send(package) {
             Ok(()) => Ok(()),
             Err(TrySendError::Full(p)) => {
+                runtime_counters::rec_sink_channel_full();
                 sample_log_with_hits!(
                     SINK_CH_FULL_HITS,
                     warn_mtrc,
@@ -63,9 +69,12 @@ impl RecSyncSink for SinkDatYSender {
                     "Sink channel full - cannot send batch package".to_string(),
                 )))
             }
-            Err(TrySendError::Closed(_)) => Err(SinkError::from(SinkReason::Sink(
-                "Sink channel closed".to_string(),
-            ))),
+            Err(TrySendError::Closed(_)) => {
+                runtime_counters::rec_sink_channel_closed();
+                Err(SinkError::from(SinkReason::Sink(
+                    "Sink channel closed".to_string(),
+                )))
+            }
         }
     }
 
@@ -84,6 +93,7 @@ impl RecSyncSink for SinkDatYSender {
             }
             Err(TrySendError::Full(package)) => {
                 // Channel 满，逐个返回
+                runtime_counters::rec_sink_channel_full();
                 for unit in package {
                     results.push(TrySendStatus::Fulfilled(
                         *unit.id(),
@@ -93,6 +103,7 @@ impl RecSyncSink for SinkDatYSender {
             }
             Err(TrySendError::Closed(_)) => {
                 // Channel 已关闭
+                runtime_counters::rec_sink_channel_closed();
                 for _ in 0..data_len {
                     results.push(TrySendStatus::Err(Arc::new(SinkError::from(
                         SinkReason::Sink("sink channel closed".to_string()),

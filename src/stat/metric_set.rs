@@ -47,11 +47,11 @@ impl MetricSet {
         let key = Self::merge_key(&x);
 
         if let Some(idx) = self.index.get(&key).copied() {
-            if let Some(sum) = self.units.get_mut(idx) {
-                if x.can_merge(sum) {
-                    sum.merge(x);
-                    return;
-                }
+            if let Some(sum) = self.units.get_mut(idx)
+                && x.can_merge(sum)
+            {
+                sum.merge(x);
+                return;
             }
             self.index.remove(&key);
         }

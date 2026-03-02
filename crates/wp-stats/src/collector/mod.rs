@@ -7,6 +7,8 @@ use crate::report::record::StatRecord;
 use crate::report::stat_report::StatCache;
 use chrono::NaiveDateTime;
 use lru::LruCache;
+use smol_str::SmolStr;
+use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use wp_log::trace_mtrc;
 
@@ -27,6 +29,7 @@ pub struct StatCollector {
     target: String,
     require: StatReq,
     record: StatCache,
+    unit_dims: HashMap<SmolStr, StatDim>,
 }
 
 impl StatCollector {
@@ -41,6 +44,7 @@ impl StatCollector {
             target,
             record: cache,
             require: req,
+            unit_dims: HashMap::new(),
         }
     }
 
@@ -80,79 +84,105 @@ impl StatCollector {
     /// This method aggregates all recorded statistics, sorts them by total count,
     /// and returns a `StatReport`. The internal cache is cleared after collection.
     pub fn collect_stat(&mut self) -> StatReport {
-        let slices = self.collect();
+        self.collect_from_cache_swapped(None)
+    }
 
-        let cache = LruCache::new(NonZeroUsize::new(self.require.max).unwrap());
-        self.record = cache;
-        slices
+    /// Collects and finalizes all records with the same timestamp in one pass.
+    pub fn collect_stat_with_time(&mut self, ts: NaiveDateTime) -> StatReport {
+        self.collect_from_cache_swapped(Some(ts))
+    }
+
+    fn collect_from_cache_swapped(&mut self, finalize_at: Option<NaiveDateTime>) -> StatReport {
+        let mut drained = Self::init_cache(&self.require);
+        std::mem::swap(&mut self.record, &mut drained);
+        let report = self.collect_from_cache(drained, finalize_at);
+        // Keep auxiliary unit-key cache bounded to current window lifecycle.
+        self.unit_dims.clear();
+        report
     }
 }
 
 impl StatRecorder<DataDim> for StatCollector {
     fn record_begin(&mut self, rule_key: &str, dat_key: DataDim) {
         let dim = StatDim::make_dim(&self.require.target, rule_key, dat_key);
-        self.rec_beg_impl(dim);
+        self.rec_beg_impl(&dim);
     }
     fn record_end(&mut self, rule_key: &str, dat_key: DataDim) {
         let dim = StatDim::make_dim(&self.require.target, rule_key, dat_key);
-        self.rec_end_impl(dim);
+        self.rec_end_impl(&dim);
     }
     fn record_task(&mut self, rule_key: &str, dat_key: DataDim) {
         let dim = StatDim::make_dim(&self.require.target, rule_key, dat_key);
-        self.rec_beg_end_impl(dim);
+        self.rec_beg_end_impl(&dim);
     }
 }
 impl StatRecorder<&str> for StatCollector {
     fn record_begin(&mut self, rule_key: &str, dat_key: &str) {
         let dim = StatDim::make_dim(&self.require.target, rule_key, DataDim::from(dat_key));
-        self.rec_beg_impl(dim);
+        self.rec_beg_impl(&dim);
     }
     fn record_end(&mut self, rule_key: &str, dat_key: &str) {
         let dim = StatDim::make_dim(&self.require.target, rule_key, DataDim::from(dat_key));
-        self.rec_end_impl(dim);
+        self.rec_end_impl(&dim);
     }
     fn record_task(&mut self, rule_key: &str, dat_key: &str) {
         let dim = StatDim::make_dim(&self.require.target, rule_key, DataDim::from(dat_key));
-        self.rec_beg_end_impl(dim);
+        self.rec_beg_end_impl(&dim);
     }
 }
 
 impl StatRecorder<()> for StatCollector {
     fn record_begin(&mut self, rule_key: &str, dat_key: ()) {
-        let dim = StatDim::make_dim(&self.require.target, rule_key, dat_key);
-        self.rec_beg_impl(dim);
+        let _ = dat_key;
+        self.rec_beg_unit_impl(rule_key);
     }
     fn record_end(&mut self, rule_key: &str, dat_key: ()) {
-        let dim = StatDim::make_dim(&self.require.target, rule_key, dat_key);
-        self.rec_end_impl(dim);
+        let _ = dat_key;
+        self.rec_end_unit_impl(rule_key);
     }
     fn record_task(&mut self, rule_key: &str, dat_key: ()) {
-        let dim = StatDim::make_dim(&self.require.target, rule_key, dat_key);
-        self.rec_beg_end_impl(dim);
+        let _ = dat_key;
+        self.rec_beg_end_unit_impl(rule_key);
     }
 }
 
 impl StatCollector {
-    fn collect(&mut self) -> StatReport {
-        let mut data = Vec::new();
-        // Only include records that match the configured target semantics.
-        // This prevents non-matching targets (stored as None / "*") from
-        // leaking into reports when StatTarget::Item is used.
-        for (k, v) in self.record.iter() {
-            let include = match &self.require.target {
-                crate::StatTarget::All => true,
-                crate::StatTarget::Ignore => false,
-                crate::StatTarget::Item(expect) => match k.target_str() {
-                    Some(actual) => actual == expect,
-                    None => false,
-                },
-            };
-            if include {
-                data.push(v.clone());
+    fn collect_from_cache(&self, cache: StatCache, finalize_at: Option<NaiveDateTime>) -> StatReport {
+        let mut data = Vec::with_capacity(cache.len());
+        match &self.require.target {
+            crate::StatTarget::All => {
+                for (_, mut v) in cache {
+                    if let Some(ts) = finalize_at {
+                        v.stat.finalize_end(ts);
+                    }
+                    data.push(v);
+                }
+            }
+            crate::StatTarget::Ignore => {}
+            crate::StatTarget::Item(expect) => {
+                // Only include records that match the configured target semantics.
+                // This prevents non-matching targets (stored as None / "*") from
+                // leaking into reports when StatTarget::Item is used.
+                for (k, mut v) in cache {
+                    let include = match k.target_str() {
+                        Some(actual) => actual == expect,
+                        None => false,
+                    };
+                    if include {
+                        if let Some(ts) = finalize_at {
+                            v.stat.finalize_end(ts);
+                        }
+                        data.push(v);
+                    }
+                }
             }
         }
-        data.sort_by(|a, b| b.stat.total.cmp(&a.stat.total));
-        data.truncate(self.require.max * TOP_N_MULTIPLIER);
+        let keep = self.require.max * TOP_N_MULTIPLIER;
+        if data.len() > keep {
+            data.select_nth_unstable_by(keep, |a, b| b.stat.total.cmp(&a.stat.total));
+            data.truncate(keep);
+        }
+        data.sort_unstable_by(|a, b| b.stat.total.cmp(&a.stat.total));
         let ins = StatReport::new(self.require.clone(), Some(self.target.clone()), data);
         trace_mtrc!("{}", ins);
         ins
@@ -160,57 +190,125 @@ impl StatCollector {
 
     /// Helper method to get or create a record, avoiding unnecessary clones
     fn get_or_create_record(&mut self, dim: &StatDim) -> &mut StatRecord {
-        if !self.record.contains(dim) {
-            let new_ins = StatRecord::new(
+        self.record.get_or_insert_mut_ref(dim, || {
+            StatRecord::new(
                 self.require.stage.clone(),
                 dim.to_string(),
                 dim.dat_string().clone(),
-            );
-            self.record.push(dim.clone(), new_ins);
+            )
+        })
+    }
+
+    fn unit_dim_cached(&mut self, rule_key: &str) -> StatDim {
+        if let Some(dim) = self.unit_dims.get(rule_key) {
+            return dim.clone();
         }
-        // Safety: we just ensured the record exists
-        self.record.get_mut(dim).expect("Record must exist")
+        let dim = StatDim::make_dim(&self.require.target, rule_key, ());
+        self.unit_dims.insert(SmolStr::new(rule_key), dim.clone());
+        dim
     }
 
-    fn rec_beg_impl(&mut self, dim: StatDim) {
-        self.get_or_create_record(&dim).rec_beg();
+    fn rec_beg_impl(&mut self, dim: &StatDim) {
+        self.get_or_create_record(dim).rec_beg();
     }
 
-    fn rec_end_impl(&mut self, dim: StatDim) {
-        self.get_or_create_record(&dim).rec_end();
+    fn rec_end_impl(&mut self, dim: &StatDim) {
+        self.get_or_create_record(dim).rec_end();
     }
 
-    fn rec_beg_end_impl(&mut self, dim: StatDim) {
-        let rec = self.get_or_create_record(&dim);
-        rec.rec_beg();
-        rec.rec_end();
+    fn rec_beg_end_impl(&mut self, dim: &StatDim) {
+        let rec = self.get_or_create_record(dim);
+        rec.rec_beg_end();
     }
 
-    /// Batch record helper: add `n` occurrences as successful completions at once.
-    fn rec_beg_end_n_impl(&mut self, dim: StatDim, n: usize) {
+    fn rec_beg_n_impl(&mut self, dim: &StatDim, n: usize) {
         if n == 0 {
             return;
         }
-        let rec = self.get_or_create_record(&dim);
+        let rec = self.get_or_create_record(dim);
+        rec.rec_beg_n(n);
+    }
+
+    fn rec_end_n_impl(&mut self, dim: &StatDim, n: usize) {
+        if n == 0 {
+            return;
+        }
+        let rec = self.get_or_create_record(dim);
+        rec.rec_end_n(n);
+    }
+
+    /// Batch record helper: add `n` occurrences as successful completions at once.
+    fn rec_beg_end_n_impl(&mut self, dim: &StatDim, n: usize) {
+        if n == 0 {
+            return;
+        }
+        let rec = self.get_or_create_record(dim);
         rec.rec_beg_end_n(n);
+    }
+
+    fn rec_beg_unit_impl(&mut self, rule_key: &str) {
+        let dim = self.unit_dim_cached(rule_key);
+        self.rec_beg_impl(&dim);
+    }
+
+    fn rec_end_unit_impl(&mut self, rule_key: &str) {
+        let dim = self.unit_dim_cached(rule_key);
+        self.rec_end_impl(&dim);
+    }
+
+    fn rec_beg_end_unit_impl(&mut self, rule_key: &str) {
+        let dim = self.unit_dim_cached(rule_key);
+        self.rec_beg_end_impl(&dim);
+    }
+
+    fn rec_beg_n_unit_impl(&mut self, rule_key: &str, n: usize) {
+        let dim = self.unit_dim_cached(rule_key);
+        self.rec_beg_n_impl(&dim, n);
+    }
+
+    fn rec_end_n_unit_impl(&mut self, rule_key: &str, n: usize) {
+        let dim = self.unit_dim_cached(rule_key);
+        self.rec_end_n_impl(&dim, n);
+    }
+
+    fn rec_beg_end_n_unit_impl(&mut self, rule_key: &str, n: usize) {
+        let dim = self.unit_dim_cached(rule_key);
+        self.rec_beg_end_n_impl(&dim, n);
     }
 }
 
 impl StatCollector {
+    /// Batch `record_begin` for DataDim
+    pub fn record_begin_n(&mut self, rule_key: &str, dat_key: DataDim, n: usize) {
+        let dim = StatDim::make_dim(&self.require.target, rule_key, dat_key);
+        self.rec_beg_n_impl(&dim, n);
+    }
+    /// Batch `record_begin` for unit `()`
+    pub fn record_begin_n_unit(&mut self, rule_key: &str, n: usize) {
+        self.rec_beg_n_unit_impl(rule_key, n);
+    }
+    /// Batch `record_end` for DataDim
+    pub fn record_end_n(&mut self, rule_key: &str, dat_key: DataDim, n: usize) {
+        let dim = StatDim::make_dim(&self.require.target, rule_key, dat_key);
+        self.rec_end_n_impl(&dim, n);
+    }
+    /// Batch `record_end` for unit `()`
+    pub fn record_end_n_unit(&mut self, rule_key: &str, n: usize) {
+        self.rec_end_n_unit_impl(rule_key, n);
+    }
     /// Batch record for DataDim
     pub fn record_task_n(&mut self, rule_key: &str, dat_key: DataDim, n: usize) {
         let dim = StatDim::make_dim(&self.require.target, rule_key, dat_key);
-        self.rec_beg_end_n_impl(dim, n);
+        self.rec_beg_end_n_impl(&dim, n);
     }
     /// Batch record for &str
     pub fn record_task_n_str(&mut self, rule_key: &str, dat_key: &str, n: usize) {
         let dim = StatDim::make_dim(&self.require.target, rule_key, DataDim::from(dat_key));
-        self.rec_beg_end_n_impl(dim, n);
+        self.rec_beg_end_n_impl(&dim, n);
     }
     /// Batch record for unit `()`
     pub fn record_task_n_unit(&mut self, rule_key: &str, n: usize) {
-        let dim = StatDim::make_dim(&self.require.target, rule_key, ());
-        self.rec_beg_end_n_impl(dim, n);
+        self.rec_beg_end_n_unit_impl(rule_key, n);
     }
 }
 
@@ -318,6 +416,36 @@ mod tests {
         assert_eq!(report.get_data().len(), 1);
         assert_eq!(report.get_data()[0].stat.total, 2);
         assert_eq!(report.get_data()[0].stat.success, 2);
+    }
+
+    #[test]
+    fn test_record_begin_end_n_with_unit_key() {
+        let mut collector = StatCollector::new(
+            "test".to_string(),
+            StatReq::simple_test(StatTarget::All, Vec::new(), 10),
+        );
+
+        collector.record_begin_n_unit("rule1", 5);
+        collector.record_end_n_unit("rule1", 3);
+
+        let report = collector.collect_stat();
+        assert_eq!(report.get_data().len(), 1);
+        assert_eq!(report.get_data()[0].stat.total, 5);
+        assert_eq!(report.get_data()[0].stat.success, 3);
+    }
+
+    #[test]
+    fn test_collect_clears_unit_dim_cache() {
+        let mut collector = StatCollector::new(
+            "test".to_string(),
+            StatReq::simple_test(StatTarget::All, Vec::new(), 10),
+        );
+
+        collector.record_task("rule1", ());
+        assert!(!collector.unit_dims.is_empty());
+
+        let _ = collector.collect_stat();
+        assert!(collector.unit_dims.is_empty());
     }
 
     #[test]

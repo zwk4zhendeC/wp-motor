@@ -251,14 +251,25 @@ impl MeasureUnit {
 }
 
 impl MeasureUnit {
-    /// Batch increment for total and success counters.
-    /// Used by higher-level collectors to record N successful tasks at once.
-    pub fn rec_beg_end_n(&mut self, n: usize) {
+    pub fn rec_in_n(&mut self, n: usize) {
         if n == 0 {
             return;
         }
         self.total = self.total.saturating_add(n);
+    }
+
+    pub fn rec_suc_n(&mut self, n: usize) {
+        if n == 0 {
+            return;
+        }
         self.success = self.success.saturating_add(n);
+    }
+
+    /// Batch increment for total and success counters.
+    /// Used by higher-level collectors to record N successful tasks at once.
+    pub fn rec_beg_end_n(&mut self, n: usize) {
+        self.rec_in_n(n);
+        self.rec_suc_n(n);
     }
 }
 

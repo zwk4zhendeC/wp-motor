@@ -117,6 +117,12 @@ where
         self.stat.rec_in();
         self.stat.rec_suc();
     }
+    pub fn rec_beg_n(&mut self, n: usize) {
+        self.stat.rec_in_n(n);
+    }
+    pub fn rec_end_n(&mut self, n: usize) {
+        self.stat.rec_suc_n(n);
+    }
     pub fn rec_beg_end_n(&mut self, n: usize) {
         self.stat.rec_beg_end_n(n);
     }

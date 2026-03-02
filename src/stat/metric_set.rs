@@ -1,5 +1,6 @@
 use crate::stat::ReportGenerator;
 use crate::stat::reporting::{ReportEngine, create_report_table};
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use wp_model_core::model::DataRecord;
 use wp_stat::StatReport;
@@ -9,6 +10,7 @@ use wp_stat::{Mergeable, ReportVariant};
 #[derive(Clone, Default)]
 pub struct MetricSet {
     units: Vec<StatReport>,
+    index: HashMap<String, usize>,
 }
 
 impl Display for MetricSet {
@@ -20,19 +22,50 @@ impl Display for MetricSet {
     }
 }
 impl MetricSet {
+    pub fn units(&self) -> &[StatReport] {
+        self.units.as_slice()
+    }
+
     pub fn merge_slice(&mut self, slices: ReportVariant) {
         let ReportVariant::Stat(x) = slices;
         self.merge_unit(x);
     }
 
+    fn merge_key(report: &StatReport) -> String {
+        match report.target_identity() {
+            Some(target) => format!(
+                "{}|{}|1|{}",
+                report.get_req().stage,
+                report.get_name(),
+                target
+            ),
+            None => format!("{}|{}|0|", report.get_req().stage, report.get_name()),
+        }
+    }
+
     fn merge_unit(&mut self, x: StatReport) {
-        for sum in self.units.iter_mut() {
+        let key = Self::merge_key(&x);
+
+        if let Some(idx) = self.index.get(&key).copied() {
+            if let Some(sum) = self.units.get_mut(idx) {
+                if x.can_merge(sum) {
+                    sum.merge(x);
+                    return;
+                }
+            }
+            self.index.remove(&key);
+        }
+
+        for (idx, sum) in self.units.iter_mut().enumerate() {
             if x.can_merge(sum) {
                 sum.merge(x);
+                self.index.insert(key, idx);
                 return;
             }
         }
+
         self.units.push(x);
+        self.index.insert(key, self.units.len() - 1);
     }
     pub fn merge(&mut self, other: MetricSet) {
         for oth in other.units {
@@ -44,12 +77,16 @@ impl MetricSet {
         for req in reqs {
             let ins = StatReport::req(req);
             self.units.push(ins);
+            let idx = self.units.len() - 1;
+            let key = Self::merge_key(&self.units[idx]);
+            self.index.insert(key, idx);
         }
     }
     pub fn show_table(&mut self) {
         let mut table = create_report_table();
-        self.units.sort();
-        for sum in self.units.iter() {
+        let mut sorted: Vec<&StatReport> = self.units.iter().collect();
+        sorted.sort();
+        for sum in sorted {
             sum.generate_report(&mut table, &mut ReportEngine::new());
         }
 

@@ -17,7 +17,7 @@ static RESCUE_FILE_SEQ: AtomicU64 = AtomicU64::new(0);
 use crate::runtime::errors::err4_send_to_sink;
 use crate::sinks::RescueFileSink;
 use crate::sinks::{
-    ASinkHandle, ASinkSender, ProcMeta, SinkBackendType, SinkDataEnum, SinkFFVPackage, SinkPackage,
+    ASinkHandle, ASinkSender, SinkBackendType, SinkDataEnum, SinkFFVPackage, SinkPackage,
     SinkStrPackage,
 };
 use crate::stat::MonSend;
@@ -302,23 +302,13 @@ impl SinkRuntime {
         let ids: Vec<u64> = (0..records.len() as u64).collect();
 
         // 统计开始
-        for record in &records {
-            self.stat_beg(&SinkDataEnum::Rec(
-                ProcMeta::Rule("flush".into()),
-                record.clone(),
-            ));
-        }
+        self.stat_beg_records_batch(&records);
 
         loop {
             match self.primary.sink_records(records.clone()).await {
                 Ok(()) => {
                     // 统计结束
-                    for record in &records {
-                        self.stat_end(&SinkDataEnum::Rec(
-                            ProcMeta::Rule("flush".into()),
-                            record.clone(),
-                        ));
-                    }
+                    self.stat_end_records_batch(&records);
                     return Ok(());
                 }
                 Err(e) => {
@@ -328,34 +318,17 @@ impl SinkRuntime {
                     match self.handle_send_error(&e, bad_s, mon).await? {
                         BatchErrHandle::Retry => continue,
                         BatchErrHandle::Consume => {
-                            for record in &records {
-                                self.stat_end(&SinkDataEnum::Rec(
-                                    ProcMeta::Rule("flush".into()),
-                                    record.clone(),
-                                ));
-                            }
+                            self.stat_end_records_batch(&records);
                             return Ok(());
                         }
                         BatchErrHandle::Throw => {
                             if requeue_on_throw {
                                 // 失败时将数据放回 buffer
+                                let pending_copy = records.clone();
                                 self.pending_records = records;
-                                // 统计结束 - 在放回 buffer 后，先克隆数据再调用 stat_end
-                                let buffer_copy: Vec<Arc<DataRecord>> =
-                                    self.pending_records.clone();
-                                for record in buffer_copy {
-                                    self.stat_end(&SinkDataEnum::Rec(
-                                        ProcMeta::Rule("flush".into()),
-                                        record.clone(),
-                                    ));
-                                }
+                                self.stat_end_records_batch(&pending_copy);
                             } else {
-                                for record in &records {
-                                    self.stat_end(&SinkDataEnum::Rec(
-                                        ProcMeta::Rule("flush".into()),
-                                        record.clone(),
-                                    ));
-                                }
+                                self.stat_end_records_batch(&records);
                             }
                             return Err(e);
                         }
@@ -497,6 +470,12 @@ impl SinkRuntime {
 
     /// 记录 FFV 包的统计开始信息
     fn record_package_stats_begin_ffv(&mut self, package: &SinkFFVPackage) {
+        if self.normal_stat.supports_unit_batch()
+            && (!self.backup_used || self.backup_stat.supports_unit_batch())
+        {
+            self.stat_beg_unit_batch(package.len());
+            return;
+        }
         for unit in package {
             self.stat_beg(&SinkDataEnum::FFV(unit.data().clone()));
         }
@@ -504,6 +483,12 @@ impl SinkRuntime {
 
     /// 记录字符串包的统计开始信息
     fn record_package_stats_begin_str(&mut self, package: &SinkStrPackage) {
+        if self.normal_stat.supports_unit_batch()
+            && (!self.backup_used || self.backup_stat.supports_unit_batch())
+        {
+            self.stat_beg_unit_batch(package.len());
+            return;
+        }
         for unit in package {
             self.stat_beg(&SinkDataEnum::Raw(unit.data().clone()));
         }
@@ -511,6 +496,12 @@ impl SinkRuntime {
 
     /// 记录 FFV 包的统计结束信息
     fn record_package_stats_end_ffv(&mut self, package: &SinkFFVPackage) {
+        if self.normal_stat.supports_unit_batch()
+            && (!self.backup_used || self.backup_stat.supports_unit_batch())
+        {
+            self.stat_end_unit_batch(package.len());
+            return;
+        }
         for unit in package {
             self.stat_end(&SinkDataEnum::FFV(unit.data().clone()));
         }
@@ -518,8 +509,76 @@ impl SinkRuntime {
 
     /// 记录字符串包的统计结束信息
     fn record_package_stats_end_str(&mut self, package: &SinkStrPackage) {
+        if self.normal_stat.supports_unit_batch()
+            && (!self.backup_used || self.backup_stat.supports_unit_batch())
+        {
+            self.stat_end_unit_batch(package.len());
+            return;
+        }
         for unit in package {
             self.stat_end(&SinkDataEnum::Raw(unit.data().clone()));
+        }
+    }
+
+    fn stat_beg_unit_batch(&mut self, count: usize) {
+        if count == 0 {
+            return;
+        }
+        self.normal_stat
+            .record_begin_batch_unit(self.name.as_str(), count);
+        if self.backup_used {
+            self.backup_stat
+                .record_begin_batch_unit(self.name.as_str(), count);
+        }
+    }
+
+    fn stat_end_unit_batch(&mut self, count: usize) {
+        if count == 0 {
+            return;
+        }
+        if self.backup_used {
+            self.backup_stat
+                .record_end_batch_unit(self.name.as_str(), count);
+        } else {
+            self.normal_stat
+                .record_end_batch_unit(self.name.as_str(), count);
+        }
+    }
+
+    fn stat_beg_records_batch(&mut self, records: &[Arc<DataRecord>]) {
+        if self.normal_stat.supports_unit_batch()
+            && (!self.backup_used || self.backup_stat.supports_unit_batch())
+        {
+            self.stat_beg_unit_batch(records.len());
+            return;
+        }
+        for record in records {
+            self.normal_stat
+                .record_begin(self.name.as_str(), Some(record.as_ref()));
+            if self.backup_used {
+                self.backup_stat
+                    .record_begin(self.name.as_str(), Some(record.as_ref()));
+            }
+        }
+    }
+
+    fn stat_end_records_batch(&mut self, records: &[Arc<DataRecord>]) {
+        if self.normal_stat.supports_unit_batch()
+            && (!self.backup_used || self.backup_stat.supports_unit_batch())
+        {
+            self.stat_end_unit_batch(records.len());
+            return;
+        }
+        if self.backup_used {
+            for record in records {
+                self.backup_stat
+                    .record_end(self.name.as_str(), Some(record.as_ref()));
+            }
+        } else {
+            for record in records {
+                self.normal_stat
+                    .record_end(self.name.as_str(), Some(record.as_ref()));
+            }
         }
     }
 

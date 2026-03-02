@@ -32,4 +32,4 @@ pub trait MetricsCalculator {
     fn update_state(&mut self, val_x: Option<f64>, val_y: Option<f64>);
 }
 
-pub const STAT_INTERVAL_MS: usize = 100;
+pub const STAT_INTERVAL_MS: usize = 50;

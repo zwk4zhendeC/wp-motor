@@ -60,6 +60,7 @@ pub struct SinkDispatcher {
     unit_pool: SinkRecUnitPool,
     ingress_target: String,
     ingress_stat: MetricCollectors,
+    ingress_pending: usize,
 }
 
 impl SinkDispatcher {
@@ -76,6 +77,7 @@ impl SinkDispatcher {
             unit_pool: SinkRecUnitPool::new(),
             ingress_stat: MetricCollectors::new(ingress_target.clone(), Vec::new()),
             ingress_target,
+            ingress_pending: 0,
         }
     }
     pub fn set_ingress_stat_target(
@@ -93,11 +95,19 @@ impl SinkDispatcher {
     }
 
     pub fn record_ingress_batch(&mut self, count: usize) {
-        self.ingress_stat
-            .record_task_batch(self.ingress_target.as_str(), count);
+        if count == 0 {
+            return;
+        }
+        self.ingress_pending = self.ingress_pending.saturating_add(count);
     }
 
     pub async fn send_ingress_stat(&mut self, mon_send: &MonSend) -> SinkResult<()> {
+        if self.ingress_pending > 0 {
+            self.ingress_stat
+                .record_task_batch(self.ingress_target.as_str(), self.ingress_pending);
+            self.ingress_pending = 0;
+        }
+
         self.ingress_stat
             .send_stat(mon_send)
             .await

@@ -2,10 +2,11 @@ use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
 
 use crate::model::dimension::{DataDim, StatTarget};
+use smol_str::SmolStr;
 
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct StatDim {
-    target: Option<String>,
+    target: Option<SmolStr>,
     collect: DataDim,
 }
 
@@ -73,13 +74,13 @@ impl DimensionBuilder<()> for StatDim {
 }
 
 impl StatDim {
-    fn make_rule_value(req_target: &StatTarget, target_str: &str) -> Option<String> {
+    fn make_rule_value(req_target: &StatTarget, target_str: &str) -> Option<SmolStr> {
         match req_target {
-            StatTarget::All => Some(target_str.to_string()),
+            StatTarget::All => Some(SmolStr::new(target_str)),
             StatTarget::Ignore => None,
             StatTarget::Item(item) => {
                 if item == target_str {
-                    Some(target_str.to_string())
+                    Some(SmolStr::new(item))
                 } else {
                     None
                 }

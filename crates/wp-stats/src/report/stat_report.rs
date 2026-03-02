@@ -1,6 +1,7 @@
 use std::{cmp::Ordering, fmt::Display};
 
 use lru::LruCache;
+use smol_str::SmolStr;
 use wp_model_core::model::{DataField, DataRecord};
 
 use crate::{
@@ -12,7 +13,6 @@ use super::record::{StatRecord, WpStatTag};
 /// Multiplier for top-N retention when merging reports
 /// We keep 2x the requested max to allow for better merging and filtering
 const TOP_N_MULTIPLIER: usize = 2;
-
 pub type StatCache = LruCache<StatDim, SliceRecord<WpStatTag>>;
 
 /// Statistical report containing aggregated metrics
@@ -68,6 +68,11 @@ impl StatReport {
         }
     }
 
+    /// Returns raw target identity used by merge/index logic.
+    pub fn target_identity(&self) -> Option<&str> {
+        self.cur_target.as_deref()
+    }
+
     /// Returns a reference to the statistical requirements
     pub fn get_req(&self) -> &StatReq {
         &self.req
@@ -102,15 +107,16 @@ impl Ord for StatReport {
 
 impl From<StatReport> for Vec<DataRecord> {
     fn from(other: StatReport) -> Self {
-        let mut crates = vec![];
+        let mut crates = Vec::with_capacity(other.data.len());
+        let stage = other.req.stage.to_string();
+        let target = other.target_display().to_string();
+        let base = DataRecord::from(vec![
+            DataField::from_chars("stage", stage.as_str()),
+            DataField::from_chars("name", other.req.name.as_str()),
+            DataField::from_chars("target", target.as_str()),
+        ]);
         for stat in other.data.iter() {
-            let tdc = vec![
-                DataField::from_chars("stage", other.req.stage.to_string().as_str()),
-                DataField::from_chars("name", other.req.name.as_str()),
-                DataField::from_chars("target", other.target_display()),
-            ];
-
-            let mut tdo = DataRecord::from(tdc);
+            let mut tdo = base.clone();
             tdo.merge(stat.covert_tdc(&other.req.collect));
             crates.push(tdo);
         }
@@ -125,27 +131,37 @@ impl Mergeable<StatReport> for StatReport {
         self.cur_target = other.cur_target;
 
         // Build a HashMap for O(1) lookup during merge
-        let mut data_map: HashMap<String, StatRecord> = HashMap::new();
+        let mut data_map: HashMap<SmolStr, StatRecord> =
+            HashMap::with_capacity(self.data.len() + other.data.len());
         for item in self.data.drain(..) {
-            data_map.insert(item.slices_key().to_string(), item);
+            data_map.insert(SmolStr::new(item.slices_key()), item);
         }
 
         // Merge other's data into the map
         for v in other.data {
-            let key = v.slices_key().to_string();
-            if let Some(existing) = data_map.get_mut(&key) {
-                if existing.can_merge(&v) {
-                    existing.merge(v);
+            let key = SmolStr::new(v.slices_key());
+            match data_map.entry(key) {
+                std::collections::hash_map::Entry::Occupied(mut existing) => {
+                    if existing.get().can_merge(&v) {
+                        existing.get_mut().merge(v);
+                    }
                 }
-            } else {
-                data_map.insert(key, v);
+                std::collections::hash_map::Entry::Vacant(vacant) => {
+                    vacant.insert(v);
+                }
             }
         }
 
         // Convert back to Vec and sort
         self.data = data_map.into_values().collect();
-        self.data.sort_by(|a, b| b.stat.total.cmp(&a.stat.total));
-        self.data.truncate(self.req.max * TOP_N_MULTIPLIER);
+        let keep = self.req.max * TOP_N_MULTIPLIER;
+        if self.data.len() > keep {
+            self.data
+                .select_nth_unstable_by(keep, |a, b| b.stat.total.cmp(&a.stat.total));
+            self.data.truncate(keep);
+        }
+        self.data
+            .sort_unstable_by(|a, b| b.stat.total.cmp(&a.stat.total));
     }
 }
 

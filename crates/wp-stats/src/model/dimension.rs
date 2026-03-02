@@ -1,12 +1,13 @@
 use orion_overload::new::New1;
 use serde_derive::{Deserialize, Serialize};
+use smallvec::{SmallVec, smallvec};
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
 use wp_model_core::model::DataField;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct DataDim {
-    item: Vec<Option<String>>,
+    item: SmallVec<[Option<String>; 4]>,
 }
 
 impl From<&str> for DataDim {
@@ -16,13 +17,20 @@ impl From<&str> for DataDim {
 }
 impl DataDim {
     pub fn empty() -> Self {
-        Self { item: Vec::new() }
+        Self {
+            item: SmallVec::new(),
+        }
+    }
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            item: SmallVec::with_capacity(capacity),
+        }
     }
     pub fn push(&mut self, v: Option<String>) {
         self.item.push(v)
     }
     pub fn to_tdc(&self, req: &[String]) -> Vec<DataField> {
-        let mut result = Vec::new();
+        let mut result = Vec::with_capacity(self.item.len().min(req.len()));
         let mut idx = 0;
         while let (Some(k), Some(v)) = (req.get(idx), self.item.get(idx)) {
             if let Some(v) = v {
@@ -37,14 +45,14 @@ impl DataDim {
 impl New1<String> for DataDim {
     fn new(a: String) -> Self {
         Self {
-            item: vec![Some(a)],
+            item: smallvec![Some(a)],
         }
     }
 }
 impl New1<&str> for DataDim {
     fn new(a: &str) -> Self {
         Self {
-            item: vec![Some(a.into())],
+            item: smallvec![Some(a.into())],
         }
     }
 }
@@ -52,21 +60,21 @@ impl New1<&str> for DataDim {
 impl New1<(String, String)> for DataDim {
     fn new(a: (String, String)) -> Self {
         Self {
-            item: vec![Some(a.0), Some(a.1)],
+            item: smallvec![Some(a.0), Some(a.1)],
         }
     }
 }
 impl New1<(&str, &str)> for DataDim {
     fn new(a: (&str, &str)) -> Self {
         Self {
-            item: vec![Some(a.0.into()), Some(a.1.into())],
+            item: smallvec![Some(a.0.into()), Some(a.1.into())],
         }
     }
 }
 impl New1<(String, String, String)> for DataDim {
     fn new(a: (String, String, String)) -> Self {
         Self {
-            item: vec![Some(a.0), Some(a.1), Some(a.2)],
+            item: smallvec![Some(a.0), Some(a.1), Some(a.2)],
         }
     }
 }
@@ -74,7 +82,7 @@ impl New1<(String, String, String)> for DataDim {
 impl New1<(&str, &str, &str)> for DataDim {
     fn new(a: (&str, &str, &str)) -> Self {
         Self {
-            item: vec![Some(a.0.into()), Some(a.1.into()), Some(a.2.into())],
+            item: smallvec![Some(a.0.into()), Some(a.1.into()), Some(a.2.into())],
         }
     }
 }

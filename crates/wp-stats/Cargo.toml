@@ -30,6 +30,8 @@ mockall = { workspace = true }
 wildmatch = { workspace = true }
 lru = { workspace = true }
 derive_builder = { workspace = true }
+smallvec = { workspace = true }
+smol_str = { workspace = true }
 
 [dev-dependencies]
 collection_literals = { workspace = true }

@@ -1,4 +1,6 @@
 use crate::knowledge::KnowdbHandler;
+use crate::runtime::actor::ExitPolicyKind;
+use crate::runtime::actor::TaskRole;
 use crate::runtime::actor::signal::ShutdownCmd;
 use crate::runtime::actor::{TaskGroup, TaskManager};
 use crate::runtime::collector::recovery::ActCovPicker;
@@ -24,7 +26,7 @@ pub async fn recover_main(
     // 在恢复模式下，业务 sink 组需要保持可写（Ready）以接收从 rescue 读取的恢复数据。
 
     let mut mon_group = TaskGroup::new("moni", ShutdownCmd::Timeout(200));
-    let infra_group = TaskGroup::new("infra", ShutdownCmd::Timeout(200));
+    let mut infra_group = TaskGroup::new("infra", ShutdownCmd::Timeout(200));
     let mut actor_mon = ActorMonitor::new(
         mon_group.subscribe(),
         Some(infra_sink.moni_agent()),
@@ -52,7 +54,12 @@ pub async fn recover_main(
     let agent = act_sink.agent();
     let mut sink_amt = ActMaintainer::new(mt_group.subscribe());
     let infra_agent = infra_sink.agent();
-    start_infra_working(infra_sink, mon_send.clone(), &infra_group, &mut sink_amt);
+    start_infra_working(
+        infra_sink,
+        mon_send.clone(),
+        &mut infra_group,
+        &mut sink_amt,
+    );
 
     let sink_group = start_data_sinks(
         infra_agent,
@@ -72,12 +79,14 @@ pub async fn recover_main(
         let _ = actor_picker.pick_data(agent, pick_reqs).await;
     }));
     let mut rt_admin = TaskManager::default();
-    rt_admin.append_group(mon_group);
-    rt_admin.append_group(sink_group);
-    rt_admin.append_group(mt_group);
-    rt_admin.append_group(infra_group);
-    rt_admin.set_main(picker_group);
-    rt_admin.all_down_wait_signal().await?;
+    rt_admin.append_group_with_role(TaskRole::Monitor, mon_group);
+    rt_admin.append_group_with_role(TaskRole::Sink, sink_group);
+    rt_admin.append_group_with_role(TaskRole::Maintainer, mt_group);
+    rt_admin.append_group_with_role(TaskRole::Infra, infra_group);
+    rt_admin.append_group_with_role(TaskRole::Picker, picker_group);
+    rt_admin
+        .all_down_wait_policy(ExitPolicyKind::Daemon)
+        .await?;
 
     Ok(())
 }

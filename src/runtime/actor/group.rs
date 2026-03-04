@@ -6,9 +6,9 @@ use orion_error::ErrorWith;
 use orion_error::{ContextRecord, ErrorOwe, WithContext};
 use std::time::Duration;
 use tokio::task::JoinHandle;
-use tokio::time::sleep;
+use tokio::time::{sleep, timeout};
 use wp_error::run_error::RunResult;
-use wp_log::{debug_ctrl, info_ctrl};
+use wp_log::{debug_ctrl, info_ctrl, warn_ctrl};
 
 #[derive(Getters)]
 pub struct TaskGroup {
@@ -88,6 +88,48 @@ impl TaskGroup {
                     sleep(Duration::from_secs(1)).await;
                 }
                 h.await.owe_sys().with(&ctx)?;
+            }
+            debug_ctrl!("{} group routines[{}] finished end", self.name, index);
+            index += 1;
+        }
+        info_ctrl!("{} group routines end", self.name);
+        Ok(())
+    }
+
+    pub async fn wait_grace_down_with_timeout(
+        &mut self,
+        out_cmd: Option<ActorCtrlCmd>,
+        wait_timeout: Duration,
+    ) -> RunResult<()> {
+        let cmd = out_cmd.unwrap_or(self.cmd.clone());
+        let mut ctx = WithContext::want("grace down routine group with timeout");
+        let msg = format!(
+            "{} broadcast cmd :{:?} (wait_timeout={:?})",
+            self.name, cmd, wait_timeout
+        );
+        info_ctrl!("{}", msg);
+        ctx.record("cmd", msg);
+        self.cmd_pub.broadcast(cmd).await.owe_sys().with(&ctx)?;
+
+        let mut index = 0;
+        while let Some(mut h) = self.handles.pop() {
+            if !h.is_finished() {
+                info_ctrl!("{} group routines [{}] wait... ", self.name, index);
+                match timeout(wait_timeout, &mut h).await {
+                    Ok(join_result) => {
+                        join_result.owe_sys().with(&ctx)?;
+                    }
+                    Err(_) => {
+                        warn_ctrl!(
+                            "{} group routines [{}] wait timeout after {:?}, aborting task",
+                            self.name,
+                            index,
+                            wait_timeout
+                        );
+                        h.abort();
+                        let _ = h.await;
+                    }
+                }
             }
             debug_ctrl!("{} group routines[{}] finished end", self.name, index);
             index += 1;

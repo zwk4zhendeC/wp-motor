@@ -25,7 +25,7 @@ use crate::orchestrator::engine::resource::EngineResource;
 use crate::orchestrator::engine::resource::WarpResourceBuilder;
 use crate::orchestrator::engine::service::start_warp_service;
 use crate::resources::core::manager::ResManager;
-use crate::runtime::actor::{self, TaskManager};
+use crate::runtime::actor::{self, ExitPolicyKind, TaskManager};
 use crate::runtime::sink::act_sink::SinkService;
 use crate::runtime::sink::infrastructure::InfraSinkService;
 use crate::sources::SourceConfigParser;
@@ -140,6 +140,10 @@ impl WpApp {
         let mut task_admin = self
             .start_service(run_mode.clone(), &self.env_dict.clone())
             .await?;
+        let exit_policy = match run_mode {
+            RunMode::Batch => ExitPolicyKind::Batch,
+            RunMode::Daemon => ExitPolicyKind::Daemon,
+        };
         warn_ctrl!("engine started!");
 
         if self.bus_enabled {
@@ -148,7 +152,7 @@ impl WpApp {
                     /*
                     Some(_) = self.cmd_recv.recv() => {
                         info_ctrl!("wparse engine reloading...");
-                        task_admin.all_down_wait_signal_ex().await?;
+                        task_admin.all_down_force_policy(exit_policy).await?;
                         self.start_service(run_mode.clone()).await?;
                         info_ctrl!("wparse engine reload done!");
                     }
@@ -161,7 +165,9 @@ impl WpApp {
                         false
                     } => {
                         if stop {
-                            task_admin.all_down_wait_signal_ex().await?;
+                            task_admin
+                                .all_down_wait_policy_with_signal(exit_policy, true)
+                                .await?;
                             break;
                         }
                     }
@@ -169,7 +175,7 @@ impl WpApp {
                 }
             }
         } else {
-            task_admin.all_down_wait_signal().await?;
+            task_admin.all_down_wait_policy(exit_policy).await?;
         }
         Ok(())
     }

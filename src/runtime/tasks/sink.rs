@@ -68,7 +68,7 @@ pub fn start_data_sinks(
 pub fn start_infra_working(
     infra_sink: InfraSinkService,
     mon_send: MonSend,
-    infra_group: &TaskGroup,
+    infra_group: &mut TaskGroup,
     act_mt_sink: &mut ActMaintainer,
 ) {
     let batch_timeout_ms = [
@@ -96,7 +96,7 @@ pub fn start_infra_working(
     let sink_cmd_sub = infra_group.subscribe();
     let sink_mon = mon_send.clone();
 
-    tokio::spawn(async move {
+    let handle = tokio::spawn(async move {
         info_data!(
             "spawn tokio Sink infra Group batch_timeout_ms={} default.batch_size={} miss.batch_size={} residue.batch_size={} monitor.batch_size={} error.batch_size={}",
             batch_timeout_ms,
@@ -119,4 +119,5 @@ pub fn start_infra_working(
             error_ctrl! { "sink error: {}", e}
         }
     });
+    infra_group.append(handle);
 }

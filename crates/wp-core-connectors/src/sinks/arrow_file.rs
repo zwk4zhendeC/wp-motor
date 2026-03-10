@@ -9,11 +9,10 @@ use tokio::io::AsyncWriteExt;
 use wp_arrow::convert::records_to_batch;
 use wp_arrow::ipc::encode_ipc;
 use wp_arrow::schema::{FieldDef, parse_wp_type};
-use wp_conf::connectors::{ConnectorDef, ParamMap, SinkDefProvider};
 use wp_connector_api::SinkResult;
 use wp_connector_api::{
-    AsyncCtrl, AsyncRawDataSink, AsyncRecordSink, SinkBuildCtx, SinkErrorOwe, SinkFactory,
-    SinkHandle, SinkSpec as ResolvedSinkSpec,
+    AsyncCtrl, AsyncRawDataSink, AsyncRecordSink, ConnectorDef, ParamMap, SinkBuildCtx,
+    SinkDefProvider, SinkErrorOwe, SinkFactory, SinkHandle, SinkSpec as ResolvedSinkSpec,
 };
 use wp_model_core::model::DataRecord;
 

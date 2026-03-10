@@ -1,11 +1,10 @@
 use crate::builtin;
 use async_trait::async_trait;
 use orion_conf::ErrorOwe;
-use wp_conf::connectors::{ConnectorDef, SinkDefProvider};
 use wp_connector_api::SinkResult;
 use wp_connector_api::{
-    AsyncCtrl, AsyncRawDataSink, AsyncRecordSink, SinkBuildCtx, SinkFactory, SinkHandle,
-    SinkSpec as ResolvedSinkSpec,
+    AsyncCtrl, AsyncRawDataSink, AsyncRecordSink, ConnectorDef, SinkBuildCtx, SinkDefProvider,
+    SinkFactory, SinkHandle, SinkSpec as ResolvedSinkSpec,
 };
 use wp_data_fmt::RecordFormatter; // for fmt_record
 

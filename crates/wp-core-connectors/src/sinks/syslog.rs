@@ -1,17 +1,10 @@
 use crate::{builtin, registry};
 use async_trait::async_trait;
-use orion_conf::{EnvTomlLoad, ErrorOwe};
-use orion_variate::EnvDict;
-use serde_json::json;
-use std::str::FromStr;
-use wp_conf::SafeDefault;
-use wp_conf::connectors::{ConnectorDef, SinkDefProvider, param_map_to_table};
-use wp_conf::structure::Protocol as ConfProtocol;
-use wp_conf::structure::SyslogSinkConf;
+use orion_conf::ErrorOwe;
 use wp_connector_api::SinkResult;
 use wp_connector_api::{
-    AsyncCtrl, AsyncRawDataSink, AsyncRecordSink, SinkBuildCtx, SinkFactory, SinkHandle,
-    SinkSpec as ResolvedSinkSpec,
+    AsyncCtrl, AsyncRawDataSink, AsyncRecordSink, ConnectorDef, SinkBuildCtx, SinkDefProvider,
+    SinkFactory, SinkHandle, SinkSpec as ResolvedSinkSpec,
 };
 use wp_data_fmt::RecordFormatter; // for fmt_record
 // no extra orion-error/conf helpers needed after route-builder removal
@@ -22,7 +15,45 @@ use crate::net::transport::{
 };
 use crate::protocol::syslog::{EmitMessage, SyslogEncoder};
 
-fn syslog_conf_from_spec(spec: &ResolvedSinkSpec) -> AnyResult<SyslogSinkConf> {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SyslogProtocol {
+    Udp,
+    Tcp,
+}
+
+impl SyslogProtocol {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Udp => "udp",
+            Self::Tcp => "tcp",
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct SyslogSinkSpec {
+    addr: String,
+    port: u16,
+    protocol: SyslogProtocol,
+    app_name: Option<String>,
+}
+
+impl SyslogSinkSpec {
+    fn target_addr(&self) -> String {
+        format!("{}:{}", self.addr, self.port)
+    }
+
+    fn resolved_app_name(&self, fallback: &str) -> String {
+        self.app_name
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| fallback.to_string())
+    }
+}
+
+fn syslog_conf_from_spec(spec: &ResolvedSinkSpec) -> AnyResult<SyslogSinkSpec> {
     let addr = spec
         .params
         .get("addr")
@@ -48,24 +79,28 @@ fn syslog_conf_from_spec(spec: &ResolvedSinkSpec) -> AnyResult<SyslogSinkConf> {
         .params
         .get("port")
         .and_then(|v| v.as_i64())
-        .unwrap_or(514);
+        .unwrap_or(514) as u16;
     let protocol = spec
         .params
         .get("protocol")
         .and_then(|v| v.as_str())
         .unwrap_or("udp");
-    let proto = ConfProtocol::from_str(&protocol.to_ascii_lowercase()).unwrap_or(ConfProtocol::UDP);
-    let mut params = wp_connector_api::ParamMap::new();
-    params.insert("addr".to_string(), json!(addr));
-    params.insert("port".to_string(), json!(port));
-    params.insert("protocol".to_string(), json!(proto.to_string()));
-    if let Some(app) = spec.params.get("app_name").and_then(|v| v.as_str()) {
-        params.insert("app_name".to_string(), json!(app));
-    }
-    let toml_str = toml::to_string(&param_map_to_table(&params))?;
-    let dict = EnvDict::safe_default();
-    let conf: SyslogSinkConf = SyslogSinkConf::env_parse_toml(&toml_str, &dict)?;
-    Ok(conf)
+    let protocol = match protocol.to_ascii_lowercase().as_str() {
+        "udp" => SyslogProtocol::Udp,
+        "tcp" => SyslogProtocol::Tcp,
+        _ => anyhow::bail!("syslog.protocol must be 'udp' or 'tcp'"),
+    };
+    let app_name = spec
+        .params
+        .get("app_name")
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string());
+    Ok(SyslogSinkSpec {
+        addr: addr.to_string(),
+        port,
+        protocol,
+        app_name,
+    })
 }
 
 pub struct SyslogSink {
@@ -286,18 +321,22 @@ impl SinkFactory for SyslogFactory {
     }
     async fn build(&self, spec: &ResolvedSinkSpec, _ctx: &SinkBuildCtx) -> SinkResult<SinkHandle> {
         let conf = syslog_conf_from_spec(spec).owe_conf()?;
-        let proto = conf.protocol.clone();
-        let target = conf.addr_str();
+        let proto = conf.protocol;
+        let target = conf.target_addr();
         // Log resolved target to aid diagnosing mismatched params
-        log::info!("syslog sink build: target={} protocol={}", target, proto);
+        log::info!(
+            "syslog sink build: target={} protocol={}",
+            target,
+            proto.as_str()
+        );
         let app_name = conf.resolved_app_name(&spec.name);
 
         // Build runtime sink directly; pass rate_limit_rps to TCP writer
         let runtime = match proto {
-            ConfProtocol::UDP => SyslogSink::udp(target.as_str(), Some(app_name.clone()))
+            SyslogProtocol::Udp => SyslogSink::udp(target.as_str(), Some(app_name.clone()))
                 .await
                 .owe_res()?,
-            ConfProtocol::TCP => {
+            SyslogProtocol::Tcp => {
                 SyslogSink::tcp(target.as_str(), Some(app_name.clone()), _ctx.rate_limit_rps)
                     .await
                     .owe_res()?
@@ -316,7 +355,76 @@ impl SinkDefProvider for SyslogFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     use tokio::net::TcpListener;
+
+    fn mk_spec(params: &[(&str, serde_json::Value)]) -> ResolvedSinkSpec {
+        let mut map = wp_connector_api::ParamMap::new();
+        for (k, v) in params {
+            map.insert((*k).to_string(), v.clone());
+        }
+        ResolvedSinkSpec {
+            group: "g".into(),
+            name: "syslog_demo".into(),
+            kind: "syslog".into(),
+            connector_id: "syslog_sink".into(),
+            params: map,
+            filter: None,
+        }
+    }
+
+    #[test]
+    fn syslog_conf_defaults_to_udp_514() {
+        let spec = mk_spec(&[("addr", json!("127.0.0.1"))]);
+        let conf = syslog_conf_from_spec(&spec).expect("parse syslog spec");
+        assert_eq!(conf.addr, "127.0.0.1");
+        assert_eq!(conf.port, 514);
+        assert_eq!(conf.protocol, SyslogProtocol::Udp);
+        assert_eq!(conf.target_addr(), "127.0.0.1:514");
+    }
+
+    #[test]
+    fn syslog_conf_accepts_tcp_and_custom_app_name() {
+        let spec = mk_spec(&[
+            ("addr", json!("10.0.0.1")),
+            ("port", json!(1514)),
+            ("protocol", json!("TCP")),
+            ("app_name", json!("my_app")),
+        ]);
+        let conf = syslog_conf_from_spec(&spec).expect("parse syslog spec");
+        assert_eq!(conf.addr, "10.0.0.1");
+        assert_eq!(conf.port, 1514);
+        assert_eq!(conf.protocol, SyslogProtocol::Tcp);
+        assert_eq!(conf.resolved_app_name("fallback"), "my_app");
+    }
+
+    #[test]
+    fn syslog_conf_falls_back_when_app_name_is_blank() {
+        let spec = mk_spec(&[("addr", json!("127.0.0.1")), ("app_name", json!("   "))]);
+        let conf = syslog_conf_from_spec(&spec).expect("parse syslog spec");
+        assert_eq!(conf.resolved_app_name("fallback_app"), "fallback_app");
+    }
+
+    #[test]
+    fn syslog_conf_rejects_invalid_protocol() {
+        let spec = mk_spec(&[("addr", json!("127.0.0.1")), ("protocol", json!("unix"))]);
+        let err = syslog_conf_from_spec(&spec).expect_err("protocol should be rejected");
+        assert!(err.to_string().contains("syslog.protocol"));
+    }
+
+    #[test]
+    fn syslog_conf_rejects_invalid_port() {
+        let spec = mk_spec(&[("addr", json!("127.0.0.1")), ("port", json!(70000))]);
+        let err = syslog_conf_from_spec(&spec).expect_err("port should be rejected");
+        assert!(err.to_string().contains("syslog.port"));
+    }
+
+    #[test]
+    fn syslog_conf_rejects_non_string_app_name() {
+        let spec = mk_spec(&[("addr", json!("127.0.0.1")), ("app_name", json!(123))]);
+        let err = syslog_conf_from_spec(&spec).expect_err("app_name should be rejected");
+        assert!(err.to_string().contains("syslog.app_name"));
+    }
 
     #[tokio::test]
     async fn syslog_sink_tcp_emits_rfc3164_message() {

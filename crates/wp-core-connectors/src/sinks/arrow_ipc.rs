@@ -8,10 +8,9 @@ use serde_json::json;
 use wp_arrow::convert::records_to_batch;
 use wp_arrow::ipc::encode_ipc;
 use wp_arrow::schema::{FieldDef, parse_wp_type};
-use wp_conf::connectors::{ConnectorDef, ParamMap, SinkDefProvider};
 use wp_connector_api::{
-    AsyncCtrl, AsyncRawDataSink, AsyncRecordSink, SinkBuildCtx, SinkFactory, SinkHandle,
-    SinkSpec as ResolvedSinkSpec,
+    AsyncCtrl, AsyncRawDataSink, AsyncRecordSink, ConnectorDef, ParamMap, SinkBuildCtx,
+    SinkDefProvider, SinkFactory, SinkHandle, SinkSpec as ResolvedSinkSpec,
 };
 use wp_connector_api::{SinkError, SinkReason, SinkResult};
 use wp_model_core::model::DataRecord;

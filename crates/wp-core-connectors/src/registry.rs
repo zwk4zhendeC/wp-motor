@@ -5,8 +5,7 @@ use once_cell::sync::OnceCell;
 use std::collections::HashMap;
 use std::panic::Location;
 use std::sync::{Arc, RwLock};
-use wp_conf::connectors::ConnectorDef;
-use wp_connector_api::{SinkFactory, SourceFactory};
+use wp_connector_api::{ConnectorDef, SinkFactory, SourceFactory};
 
 type SinkRec = (Arc<dyn SinkFactory>, &'static Location<'static>);
 type SrcRec = (Arc<dyn SourceFactory>, &'static Location<'static>);
@@ -153,10 +152,10 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use std::sync::Mutex;
-    use wp_conf::connectors::{ConnectorDef, ConnectorScope, SinkDefProvider, SourceDefProvider};
     use wp_connector_api::{
-        AsyncCtrl, AsyncRawDataSink, AsyncRecordSink, SinkBuildCtx, SinkHandle, SinkResult,
-        SourceBuildCtx, SourceResult, SourceSvcIns,
+        AsyncCtrl, AsyncRawDataSink, AsyncRecordSink, ConnectorDef, ConnectorScope, SinkBuildCtx,
+        SinkDefProvider, SinkHandle, SinkResult, SourceBuildCtx, SourceDefProvider, SourceResult,
+        SourceSvcIns,
     };
     use wp_model_core::model::DataRecord;
 

@@ -1,7 +1,6 @@
 use super::blackhole::BlackHoleSink;
 use async_trait::async_trait;
-use wp_conf::connectors::{ConnectorDef, SinkDefProvider};
-use wp_connector_api::{ParamMap, SinkFactory, SinkResult};
+use wp_connector_api::{ConnectorDef, ParamMap, SinkDefProvider, SinkFactory, SinkResult};
 
 pub struct BlackHoleFactory;
 

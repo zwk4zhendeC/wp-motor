@@ -1,5 +1,5 @@
 use serde_json::json;
-use wp_conf::connectors::{ConnectorDef, ConnectorScope, ParamMap};
+use wp_connector_api::{ConnectorDef, ConnectorScope, ParamMap};
 
 pub fn builtin_sink_defs() -> Vec<ConnectorDef> {
     let mut defs = Vec::new();

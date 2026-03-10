@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use orion_conf::ErrorOwe;
-use wp_conf::connectors::{ConnectorDef, SinkDefProvider};
-use wp_connector_api::{SinkBuildCtx, SinkFactory, SinkHandle, SinkResult, SinkSpec};
+use wp_connector_api::{
+    ConnectorDef, SinkBuildCtx, SinkDefProvider, SinkFactory, SinkHandle, SinkResult, SinkSpec,
+};
 
 use super::file::{AsyncFileSink, FileSinkSpec, FormattedFileSink};
 

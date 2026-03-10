@@ -56,7 +56,7 @@ members = [
 ]
 
 [workspace.package]
-version = "1.19.0"
+version = "1.19.1"
 edition = "2024"
 license = "Apache-2.0"
 
@@ -394,7 +394,7 @@ wp_stats = { package = "wp-stats", path = "./crates/wp-stats" }
 wp_core_connectors = { package = "wp-core-connectors", version = "0.1" }
 
 # --- External: Arrow ---
-wp-arrow = { path = "../wp-arrow" }
+wp-arrow =  "0.1"
 
 # --- External: Open API (Public Interfaces) ---
 wp-connector-api = "0.8"

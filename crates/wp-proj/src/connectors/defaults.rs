@@ -1,6 +1,6 @@
 use std::sync::Once;
 use wp_conf::connectors::{ConnectorDef, ConnectorScope};
-use wp_engine::connectors::registry;
+use wp_core_connectors::registry;
 
 pub struct ConnectorTemplate {
     pub scope: ConnectorScope,
@@ -43,6 +43,13 @@ fn templates_from_defs(mut defs: Vec<ConnectorDef>) -> Vec<ConnectorTemplate> {
 fn ensure_factories_registered() {
     static INIT: Once = Once::new();
     INIT.call_once(|| {
-        wp_engine::connectors::startup::init_runtime_registries();
+        wp_core_connectors::startup::init_runtime_registries(
+            wp_engine::sinks::register_builtin_factories,
+            || {
+                wp_engine::sources::syslog::register_syslog_factory();
+                wp_engine::sources::tcp::register_tcp_factory();
+                wp_engine::sources::file::register_factory_only();
+            },
+        );
     });
 }

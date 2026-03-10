@@ -43,11 +43,9 @@ pub use tcp_source::TcpSyslogSource;
 pub use udp_source::UdpSyslogSource;
 mod tcp_tests;
 
-use crate::connectors::registry;
-
 /// Register the syslog source factory
 pub fn register_syslog_factory() {
-    registry::register_source_factory(factory::SyslogSourceFactory::new());
+    wp_core_connectors::registry::register_source_factory(factory::SyslogSourceFactory::new());
 }
 
 // Auto-register removed: registration is centralized in connectors::startup

@@ -1,7 +1,6 @@
 use orion_conf::{ErrorWith, UvsFrom};
 use orion_error::ErrorOweBase;
-use serde_json::json;
-use wp_conf::connectors::{ConnectorDef, ConnectorScope, ParamMap};
+use wp_conf::connectors::ConnectorDef;
 use wp_conf_base::ConfParser;
 use wp_connector_api::SourceDefProvider;
 use wp_connector_api::{
@@ -107,32 +106,14 @@ impl SourceFactory for TcpSourceFactory {
 
 impl SourceDefProvider for TcpSourceFactory {
     fn source_def(&self) -> ConnectorDef {
-        let mut params = ParamMap::new();
-        params.insert("addr".into(), json!("0.0.0.0"));
-        params.insert("port".into(), json!(9000));
-        params.insert("framing".into(), json!("auto"));
-        params.insert("tcp_recv_bytes".into(), json!(256_000));
-        params.insert("instances".into(), json!(1));
-        ConnectorDef {
-            id: "tcp_src".into(),
-            kind: self.kind().into(),
-            scope: ConnectorScope::Source,
-            allow_override: vec![
-                "addr".into(),
-                "port".into(),
-                "framing".into(),
-                "tcp_recv_bytes".into(),
-                "instances".into(),
-            ],
-            default_params: params,
-            origin: Some("builtin:tcp_source".into()),
-        }
+        wp_core_connectors::builtin::source_def("tcp_src")
+            .expect("builtin source def missing: tcp_src")
     }
 }
 
 /// 注册 TCP 源工厂（集中由引擎启动入口调用）
 pub fn register_tcp_factory() {
-    crate::connectors::registry::register_source_factory(TcpSourceFactory);
+    wp_core_connectors::registry::register_source_factory(TcpSourceFactory);
 }
 
 #[cfg(test)]

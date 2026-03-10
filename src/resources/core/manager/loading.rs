@@ -104,6 +104,6 @@ impl wp_conf::sinks::SinkFactoryLookup for Lookup {
         &self,
         kind: &str,
     ) -> Option<std::sync::Arc<dyn wp_connector_api::SinkFactory + 'static>> {
-        crate::connectors::registry::get_sink_factory(kind)
+        wp_core_connectors::registry::get_sink_factory(kind)
     }
 }

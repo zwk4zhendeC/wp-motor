@@ -1,4 +1,3 @@
-use crate::connectors::registry;
 use orion_conf::error::{ConfIOReason, OrionConfResult};
 use orion_conf::{EnvTomlLoad, ErrorOwe, ErrorWith};
 use orion_error::{ToStructError, UvsFrom};
@@ -7,6 +6,7 @@ use serde_derive::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use wp_conf::structure::SourceInstanceConf;
 use wp_connector_api::{AcceptorHandle, SourceBuildCtx, SourceHandle};
+use wp_core_connectors::registry;
 use wp_log::info_ctrl;
 
 use wp_conf::sources::core_to_resolved_with;
@@ -38,7 +38,7 @@ impl wp_conf::sources::SourceFactoryRegistry for SourceFactoryLookup {
         &self,
         kind: &str,
     ) -> Option<std::sync::Arc<dyn wp_connector_api::SourceFactory + 'static>> {
-        crate::connectors::registry::get_source_factory(kind)
+        wp_core_connectors::registry::get_source_factory(kind)
     }
 }
 
@@ -94,7 +94,7 @@ impl SourceConfigParser {
                 &self,
                 kind: &str,
             ) -> Option<std::sync::Arc<dyn wp_connector_api::SourceFactory + 'static>> {
-                crate::connectors::registry::get_source_factory(kind)
+                wp_core_connectors::registry::get_source_factory(kind)
             }
         }
         wp_conf::sources::validate_specs_with_factory(&specs, &Lookup)?;
@@ -116,7 +116,7 @@ impl SourceConfigParser {
                 &self,
                 kind: &str,
             ) -> Option<std::sync::Arc<dyn wp_connector_api::SourceFactory + 'static>> {
-                crate::connectors::registry::get_source_factory(kind)
+                wp_core_connectors::registry::get_source_factory(kind)
             }
         }
         wp_conf::sources::validate_specs_with_factory(&specs, &Lookup2)?;

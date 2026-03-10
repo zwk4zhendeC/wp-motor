@@ -3,6 +3,7 @@ use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::RwLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// 语义功能全局开关（默认关闭）
@@ -16,6 +17,22 @@ pub fn set_semantic_enabled(v: bool) {
 /// 查询语义功能是否启用
 pub fn is_semantic_enabled() -> bool {
     SEMANTIC_ENABLED.load(Ordering::Relaxed)
+}
+
+/// 默认外部语义词典路径（按顺序尝试）
+const DEFAULT_SEMANTIC_DICT_PATHS: &[&str] = &[
+    "models/knowledge/semantic_dict.toml",
+    "knowledge/semantic_dict.toml",
+];
+
+/// 语义词典路径覆盖（由主引擎按 work_root 注入）
+static SEMANTIC_DICT_CONFIG_PATH: Lazy<RwLock<Option<PathBuf>>> = Lazy::new(|| RwLock::new(None));
+
+/// 设置语义词典配置文件路径（可选）
+pub fn set_semantic_dict_config_path(path: Option<PathBuf>) {
+    if let Ok(mut guard) = SEMANTIC_DICT_CONFIG_PATH.write() {
+        *guard = path;
+    }
 }
 
 /// 语义词典配置文件版本
@@ -35,6 +52,8 @@ pub enum MergeMode {
 /// 外部语义词典配置
 #[derive(Debug, Deserialize)]
 pub struct SemanticDictConf {
+    #[serde(default = "default_semantic_dict_enabled", alias = "enable")]
+    pub enabled: bool,
     pub version: u32,
     #[serde(default)]
     pub mode: MergeMode,
@@ -48,6 +67,10 @@ pub struct SemanticDictConf {
     pub action_verbs: Option<ActionVerbsConf>,
     #[serde(default)]
     pub entity_nouns: Option<EntityNounsConf>,
+}
+
+fn default_semantic_dict_enabled() -> bool {
+    true
 }
 
 #[derive(Debug, Deserialize)]
@@ -119,16 +142,38 @@ fn build_hashset_from_strs(words: &[&'static str]) -> HashSet<&'static str> {
     words.iter().copied().collect()
 }
 
+fn resolve_semantic_dict_path(config_path: Option<&Path>) -> Option<PathBuf> {
+    if let Some(path) = config_path {
+        return Some(path.to_path_buf());
+    }
+
+    if let Ok(guard) = SEMANTIC_DICT_CONFIG_PATH.read()
+        && let Some(path) = guard.as_ref()
+    {
+        return Some(path.clone());
+    }
+
+    for rel in DEFAULT_SEMANTIC_DICT_PATHS.iter() {
+        let path = PathBuf::from(rel);
+        if path.exists() {
+            return Some(path);
+        }
+    }
+    None
+}
+
 /// 全局语义词典（使用 Lazy 延迟加载）
 pub static SEMANTIC_DICT: Lazy<SemanticDict> = Lazy::new(|| {
     // 创建内置默认词典
     let mut dict = SemanticDict::builtin();
 
-    // 尝试加载外部配置
-    if let Ok(config_path) = std::env::var("SEMANTIC_DICT_CONFIG") {
-        match load_semantic_dict(Path::new(&config_path)) {
+    // 尝试加载外部配置（默认路径或显式设置的路径）
+    if let Some(config_path) = resolve_semantic_dict_path(None) {
+        match load_semantic_dict(&config_path) {
             Ok(conf) => {
-                dict.merge(conf);
+                if conf.enabled {
+                    dict.merge(conf);
+                }
             }
             Err(e) => {
                 eprintln!(
@@ -431,7 +476,7 @@ impl SemanticDict {
 /// 用于 `wproj check` 命令验证配置文件
 ///
 /// # 参数
-/// - `config_path`: 配置文件路径（可选），如果为 None 则检查环境变量 SEMANTIC_DICT_CONFIG
+/// - `config_path`: 配置文件路径（可选），如果为 None 则使用默认路径自动探测
 ///
 /// # 返回
 /// - Ok(Some(message)): 配置文件存在且有效，返回成功信息
@@ -439,13 +484,7 @@ impl SemanticDict {
 /// - Err(message): 配置文件无效或加载失败
 pub fn check_semantic_dict_config(config_path: Option<&Path>) -> Result<Option<String>, String> {
     // 确定配置文件路径
-    let path = if let Some(p) = config_path {
-        Some(p.to_path_buf())
-    } else {
-        std::env::var("SEMANTIC_DICT_CONFIG")
-            .ok()
-            .map(PathBuf::from)
-    };
+    let path = resolve_semantic_dict_path(config_path);
 
     // 如果没有配置，返回 None（使用内置词典）
     let Some(path) = path else {
@@ -454,12 +493,18 @@ pub fn check_semantic_dict_config(config_path: Option<&Path>) -> Result<Option<S
 
     // 检查文件是否存在
     if !path.exists() {
-        return Err(format!("语义词典配置文件不存在: {}", path.display()));
+        if config_path.is_some() {
+            return Err(format!("语义词典配置文件不存在: {}", path.display()));
+        }
+        return Ok(None);
     }
 
     // 尝试加载并验证配置
     match load_semantic_dict(&path) {
         Ok(conf) => {
+            if !conf.enabled {
+                return Ok(None);
+            }
             // 统计配置的词汇数量
             let mut total_words = 0;
             if let Some(ref stop_words) = conf.stop_words {
@@ -509,17 +554,36 @@ pub fn init_semantic_dict() -> Result<String, String> {
     // 触发 SEMANTIC_DICT 的延迟初始化
     let dict = &*SEMANTIC_DICT;
 
-    // 检查是否有外部配置
-    if let Ok(config_path) = std::env::var("SEMANTIC_DICT_CONFIG") {
-        // 外部配置已在 SEMANTIC_DICT 初始化时加载
-        Ok(format!(
-            "语义词典已加载 | 配置: {} | 词汇数: {} 个领域词, {} 个停用词",
-            config_path,
-            dict.domain_words.len(),
-            dict.stop_words.len()
-        ))
+    // 检查是否有外部配置（默认路径或显式设置路径）
+    if let Some(config_path) = resolve_semantic_dict_path(None) {
+        if !config_path.exists() {
+            return Ok(format!(
+                "语义词典已加载 | 使用内置词典 | 词汇数: {} 个领域词, {} 个停用词",
+                dict.domain_words.len(),
+                dict.stop_words.len()
+            ));
+        }
+        match load_semantic_dict(&config_path) {
+            Ok(conf) => {
+                if conf.enabled {
+                    Ok(format!(
+                        "语义词典已加载 | 配置: {} | 词汇数: {} 个领域词, {} 个停用词",
+                        config_path.display(),
+                        dict.domain_words.len(),
+                        dict.stop_words.len()
+                    ))
+                } else {
+                    Ok(format!(
+                        "语义词典已加载 | 外部词典已禁用: {} | 使用内置词典 | 词汇数: {} 个领域词, {} 个停用词",
+                        config_path.display(),
+                        dict.domain_words.len(),
+                        dict.stop_words.len()
+                    ))
+                }
+            }
+            Err(e) => Err(format!("语义词典配置加载失败: {}", e)),
+        }
     } else {
-        // 使用内置词典
         Ok(format!(
             "语义词典已加载 | 使用内置词典 | 词汇数: {} 个领域词, {} 个停用词",
             dict.domain_words.len(),
@@ -540,6 +604,9 @@ pub fn generate_default_semantic_dict_config() -> String {
 # 用于扩展或替换系统内置的语义词典
 
 version = 1
+
+# 外部词典开关（可选，默认 true）
+enabled = true
 
 # 配置模式：
 #   - "add"：将下面的词汇添加到系统内置词典（默认，推荐）
@@ -626,6 +693,7 @@ mod tests {
         let original_count = dict.status_words.len();
 
         let conf = SemanticDictConf {
+            enabled: true,
             version: 1,
             mode: MergeMode::Add,
             status_words: Some(StatusWordsConf {
@@ -653,6 +721,7 @@ mod tests {
         let mut dict = SemanticDict::builtin();
 
         let conf = SemanticDictConf {
+            enabled: true,
             version: 1,
             mode: MergeMode::Replace,
             status_words: Some(StatusWordsConf {
@@ -693,6 +762,7 @@ chinese = ["部署"]
         temp_file.write_all(config_content.as_bytes()).unwrap();
 
         let conf = load_semantic_dict(temp_file.path()).unwrap();
+        assert!(conf.enabled);
         assert_eq!(conf.version, 1);
         assert_eq!(conf.mode, MergeMode::Add);
 
@@ -707,6 +777,51 @@ chinese = ["部署"]
         assert!(!SEMANTIC_DICT.core_pos.is_empty());
         assert!(!SEMANTIC_DICT.stop_words.is_empty());
         assert!(!SEMANTIC_DICT.domain_words.is_empty());
+    }
+
+    #[test]
+    fn test_load_external_config_can_disable() {
+        let config_content = r#"
+version = 1
+enabled = false
+mode = "add"
+"#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(config_content.as_bytes()).unwrap();
+
+        let conf = load_semantic_dict(temp_file.path()).unwrap();
+        assert!(!conf.enabled);
+    }
+
+    #[test]
+    fn test_load_external_config_accepts_legacy_enable_key() {
+        let config_content = r#"
+version = 1
+enable = false
+mode = "add"
+"#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(config_content.as_bytes()).unwrap();
+
+        let conf = load_semantic_dict(temp_file.path()).unwrap();
+        assert!(!conf.enabled);
+    }
+
+    #[test]
+    fn test_check_config_returns_none_when_disabled() {
+        let config_content = r#"
+version = 1
+enabled = false
+mode = "add"
+"#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(config_content.as_bytes()).unwrap();
+
+        let result = check_semantic_dict_config(Some(temp_file.path())).unwrap();
+        assert!(result.is_none());
     }
 
     #[test]

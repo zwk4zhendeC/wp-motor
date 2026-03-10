@@ -9,14 +9,12 @@ use super::udp_source::UdpSyslogSource;
 use crate::sources::tcp::{FramingMode, TcpAcceptor, TcpSource};
 use orion_conf::{ErrorWith, UvsFrom};
 use orion_error::ErrorOweBase;
-use serde_json::json;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
-use wp_conf::connectors::{ConnectorDef, ConnectorScope};
+use wp_conf::connectors::ConnectorDef;
 use wp_conf::limits::tcp_reader_batch_channel_cap;
 use wp_conf_base::ConfParser;
-use wp_connector_api::ParamMap;
 use wp_connector_api::{
     AcceptorHandle, SourceBuildCtx, SourceDefProvider, SourceFactory, SourceHandle, SourceMeta,
     SourceReason, SourceResult, SourceSvcIns, Tags,
@@ -139,29 +137,7 @@ impl SourceFactory for SyslogSourceFactory {
 
 impl SourceDefProvider for SyslogSourceFactory {
     fn source_def(&self) -> ConnectorDef {
-        let mut params = ParamMap::new();
-        params.insert("addr".into(), json!("0.0.0.0"));
-        params.insert("port".into(), json!(514));
-        params.insert("protocol".into(), json!("udp"));
-        params.insert("tcp_recv_bytes".into(), json!(10_485_760));
-        params.insert("udp_recv_buffer".into(), json!(8_388_608)); // 8 MB
-        params.insert("header_mode".into(), json!("skip"));
-        params.insert("fast_strip".into(), json!(false));
-        ConnectorDef {
-            id: "syslog_src".into(),
-            kind: self.kind().into(),
-            scope: ConnectorScope::Source,
-            allow_override: vec![
-                "addr".into(),
-                "port".into(),
-                "protocol".into(),
-                "tcp_recv_bytes".into(),
-                "udp_recv_buffer".into(),
-                "header_mode".into(),
-                "fast_strip".into(),
-            ],
-            default_params: params,
-            origin: Some("builtin:syslog_source".into()),
-        }
+        wp_core_connectors::builtin::source_def("syslog_src")
+            .expect("builtin source def missing: syslog_src")
     }
 }

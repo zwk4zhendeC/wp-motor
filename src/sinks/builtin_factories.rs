@@ -1,27 +1,20 @@
+use crate::sinks::backends::arrow_file::ArrowFileFactory;
+use crate::sinks::backends::arrow_ipc::ArrowIpcFactory;
 use crate::sinks::backends::blackhole::BlackHoleSink;
 use crate::sinks::backends::blackhole_factory::BlackHoleFactory;
 use crate::sinks::backends::file_factory::FileFactory;
 use crate::sinks::backends::syslog::SyslogFactory;
 use crate::sinks::backends::tcp::TcpFactory;
 use crate::sinks::backends::test_rescue::TestRescueFactory;
-use wp_conf::connectors::{ConnectorDef, SinkDefProvider};
 
 pub fn register_builtin_factories() {
-    crate::connectors::registry::register_sink_factory(BlackHoleFactory);
-    crate::connectors::registry::register_sink_factory(FileFactory);
-    crate::connectors::registry::register_sink_factory(SyslogFactory);
-    crate::connectors::registry::register_sink_factory(TcpFactory);
-    crate::connectors::registry::register_sink_factory(TestRescueFactory);
-}
-
-pub fn builtin_sink_defs() -> Vec<ConnectorDef> {
-    let mut defs = Vec::new();
-    defs.append(&mut BlackHoleFactory.sink_defs());
-    defs.append(&mut FileFactory.sink_defs());
-    defs.append(&mut SyslogFactory.sink_defs());
-    defs.append(&mut TcpFactory.sink_defs());
-    defs.append(&mut TestRescueFactory.sink_defs());
-    defs
+    wp_core_connectors::registry::register_sink_factory(ArrowFileFactory);
+    wp_core_connectors::registry::register_sink_factory(ArrowIpcFactory);
+    wp_core_connectors::registry::register_sink_factory(BlackHoleFactory);
+    wp_core_connectors::registry::register_sink_factory(FileFactory);
+    wp_core_connectors::registry::register_sink_factory(SyslogFactory);
+    wp_core_connectors::registry::register_sink_factory(TcpFactory);
+    wp_core_connectors::registry::register_sink_factory(TestRescueFactory);
 }
 
 #[allow(dead_code)]

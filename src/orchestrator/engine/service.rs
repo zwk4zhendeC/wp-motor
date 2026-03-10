@@ -43,6 +43,14 @@ pub async fn start_warp_service(
 
     // 语义分析开关（控制 jieba 分词器和语义词典的加载）
     oml::set_semantic_enabled(args.semantic_enabled);
+    info_ctrl!(
+        "semantic analysis: {}",
+        if args.semantic_enabled {
+            "enabled"
+        } else {
+            "disabled"
+        }
+    );
 
     // 提前设置全局构建期限速提示（发送单元构建期将读取该目标决定背压策略）。
     crate::sinks::set_global_rate_limit_rps(args.speed_limit);

@@ -10,7 +10,7 @@ use tokio::time::{Duration, timeout};
 use wp_connector_api::{
     ControlEvent, DataSource, SourceBuildCtx, SourceSpec as ResolvedSourceSpec, Tags,
 };
-use wp_engine::connectors::registry as reg;
+use wp_core_connectors::registry as reg;
 use wp_engine::sources::syslog::{TcpSyslogSource, UdpSyslogSource};
 
 // 轻量通用工具（与其它 tests 共享）

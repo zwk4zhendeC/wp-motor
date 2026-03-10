@@ -2,9 +2,8 @@ use super::source::{FileEncoding, FileSource};
 use async_trait::async_trait;
 use orion_conf::{ErrorWith, UvsFrom};
 use orion_error::ErrorOweBase;
-use serde_json::json;
 use std::path::Path;
-use wp_conf::connectors::{ConnectorDef, ConnectorScope, ParamMap};
+use wp_conf::connectors::ConnectorDef;
 use wp_conf_base::ConfParser;
 use wp_connector_api::Tags;
 use wp_connector_api::{
@@ -132,23 +131,13 @@ impl SourceFactory for FileSourceFactory {
 
 impl SourceDefProvider for FileSourceFactory {
     fn source_def(&self) -> ConnectorDef {
-        let mut params = ParamMap::new();
-        params.insert("base".into(), json!("./data/in_dat"));
-        params.insert("file".into(), json!("gen.dat"));
-        params.insert("encode".into(), json!("text"));
-        ConnectorDef {
-            id: "file_src".into(),
-            kind: self.kind().into(),
-            scope: ConnectorScope::Source,
-            allow_override: vec!["base".into(), "file".into(), "encode".into()],
-            default_params: params,
-            origin: Some("builtin:file_source".into()),
-        }
+        wp_core_connectors::builtin::source_def("file_src")
+            .expect("builtin source def missing: file_src")
     }
 }
 
 pub fn register_factory_only() {
-    crate::connectors::registry::register_source_factory(FileSourceFactory);
+    wp_core_connectors::registry::register_source_factory(FileSourceFactory);
 }
 
 fn compute_file_ranges(path: &Path, instances: usize) -> std::io::Result<Vec<(u64, Option<u64>)>> {

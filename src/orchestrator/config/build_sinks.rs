@@ -66,7 +66,7 @@ pub async fn build_sink_target(
     let ctx =
         SinkBuildCtx::new_with_replica(std::env::current_dir().unwrap(), replica_idx, replica_cnt)
             .with_limit(rate_limit_rps);
-    if let Some(factory) = crate::connectors::registry::get_sink_factory(&kind) {
+    if let Some(factory) = wp_core_connectors::registry::get_sink_factory(&kind) {
         // Factory path: use flattened params directly
         op.debug("load factory suc!");
         let spec: wp_connector_api::SinkSpec = core_to_resolved(&core);

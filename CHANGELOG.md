@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.18.1] - 2026-03-09
+
+### Changed
+- **Semantic Dict/Loader**: Switch external dictionary discovery to default path probing (`models/knowledge/semantic_dict.toml` then `knowledge/semantic_dict.toml`) and support work-root path injection from engine startup
+- **Semantic Dict/Config**: Add `enabled` switch for external dictionary config (also accepts legacy `enable` key) so external merge can be disabled while keeping builtin dictionary
+- **Observability**: Add startup logs for semantic analysis toggle and semantic dictionary load status
+- **Documentation**: Update Chinese/English semantic dictionary docs to reflect default-path loading and `enabled` usage
+
+### Fixed
+- **wp-proj/check**: Resolve semantic dictionary config under target `work_root` during project checks instead of relying on process environment
+- **Semantic Dict/Validation**: Treat missing auto-detected external config as builtin fallback and skip validation success output when external config is explicitly disabled
+
 ## [1.18.0 Unreleased]
 
 ### Changed

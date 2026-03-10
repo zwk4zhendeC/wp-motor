@@ -114,6 +114,24 @@ impl WpApp {
             self.run_args.parallel,
             self.run_args.line_max
         );
+        let work_root_str = self.conf_manager.work_root_path();
+        let work_root = Path::new(work_root_str.as_str());
+        let semantic_dict_path = {
+            let primary = work_root.join("models/knowledge/semantic_dict.toml");
+            if primary.exists() {
+                primary
+            } else {
+                work_root.join("knowledge/semantic_dict.toml")
+            }
+        };
+        oml::set_semantic_dict_config_path(Some(semantic_dict_path));
+        match oml::check_semantic_dict_config(None) {
+            Ok(Some(msg)) => info_ctrl!("semantic dict: {}", msg),
+            Ok(None) => {
+                info_ctrl!("semantic dict: use builtin (missing or disabled external config)")
+            }
+            Err(e) => warn_ctrl!("semantic dict config invalid: {}, fallback to builtin", e),
+        }
 
         let eng_res = load_engine_res(
             &self.main_conf,

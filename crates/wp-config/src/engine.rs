@@ -83,7 +83,7 @@ impl Default for PerformanceConf {
 
 #[derive(Debug, Default, PartialEq, Deserialize, Serialize, Clone)]
 pub struct SemanticConf {
-    #[serde(default)]
+    #[serde(default, alias = "enable")]
     pub enabled: bool,
 }
 
@@ -425,5 +425,29 @@ mod tests {
         let work_root = Path::new("/work");
         let result = resolve_engine_path("/absolute/path", work_root);
         assert_eq!(result, "/absolute/path");
+    }
+
+    #[test]
+    fn test_semantic_conf_accepts_enabled_key() {
+        let conf: EngineConfig = toml::from_str(
+            r#"
+            [semantic]
+            enabled = true
+            "#,
+        )
+        .expect("parse config with semantic.enabled");
+        assert!(conf.semantic().enabled);
+    }
+
+    #[test]
+    fn test_semantic_conf_accepts_legacy_enable_key() {
+        let conf: EngineConfig = toml::from_str(
+            r#"
+            [semantic]
+            enable = true
+            "#,
+        )
+        .expect("parse config with semantic.enable");
+        assert!(conf.semantic().enabled);
     }
 }

@@ -3,9 +3,8 @@ use crate::sinks::sink_build::build_file_sink;
 use crate::sinks::{ASinkTestProxy, HealthController};
 use async_trait::async_trait;
 use orion_error::ErrorOwe;
-use serde_json::json;
-use wp_conf::connectors::{ConnectorDef, ConnectorScope, SinkDefProvider};
-use wp_connector_api::{ParamMap, SinkBuildCtx, SinkFactory, SinkResult, SinkSpec};
+use wp_conf::connectors::{ConnectorDef, SinkDefProvider};
+use wp_connector_api::{SinkBuildCtx, SinkFactory, SinkResult, SinkSpec};
 
 pub struct TestRescueFactory;
 
@@ -36,17 +35,7 @@ impl SinkFactory for TestRescueFactory {
 
 impl SinkDefProvider for TestRescueFactory {
     fn sink_def(&self) -> ConnectorDef {
-        let mut params = ParamMap::new();
-        params.insert("fmt".into(), json!("kv"));
-        params.insert("base".into(), json!("./data/out_dat"));
-        params.insert("file".into(), json!("default.kv"));
-        ConnectorDef {
-            id: "file_rescue_sink".into(),
-            kind: self.kind().into(),
-            scope: ConnectorScope::Sink,
-            allow_override: vec!["base".into(), "file".into()],
-            default_params: params,
-            origin: Some("builtin:test_rescue".into()),
-        }
+        wp_core_connectors::builtin::sink_def("file_rescue_sink")
+            .expect("builtin sink def missing: file_rescue_sink")
     }
 }

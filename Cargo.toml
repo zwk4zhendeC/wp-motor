@@ -51,13 +51,12 @@ members = [
 
     # --- CLI & Tools ---
     "crates/wp-cli-core", # CLI shared infrastructure
-    "crates/wp-core-connectors", # Connector registry core
     "crates/wp-proj", # Project management utilities
     "crates/wp-stats", # Statistics collection
 ]
 
 [workspace.package]
-version = "1.18.2"
+version = "1.19.0"
 edition = "2024"
 license = "Apache-2.0"
 
@@ -176,7 +175,7 @@ wp_stat = { package = "wp-stats", path = "crates/wp-stats" }
 
 # --- Internal: CLI Core ---
 wp_cli_core = { package = "wp-cli-core", path = "crates/wp-cli-core" }
-wp_core_connectors = { package = "wp-core-connectors", path = "crates/wp-core-connectors" }
+wp_core_connectors = { workspace = true }
 
 # --- External: API Layer ---
 wp-connector-api = { workspace = true }
@@ -392,7 +391,7 @@ wp_oml = { package = "wp-oml", path = "./crates/wp-oml" }
 wp_parser = { package = "wp-parser", path = "./crates/wp-parser" }
 wp_proj = { package = "wp-proj", path = "./crates/wp-proj" }
 wp_stats = { package = "wp-stats", path = "./crates/wp-stats" }
-wp_core_connectors = { package = "wp-core-connectors", path = "./crates/wp-core-connectors" }
+wp_core_connectors = { package = "wp-core-connectors", version = "0.1" }
 
 # --- External: Arrow ---
 wp-arrow = { path = "../wp-arrow" }

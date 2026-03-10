@@ -325,6 +325,10 @@ impl SinkDefProvider for ArrowIpcFactory {
         crate::builtin::sink_def("arrow_ipc_sink")
             .expect("builtin sink def missing: arrow_ipc_sink")
     }
+
+    fn sink_defs(&self) -> Vec<ConnectorDef> {
+        crate::builtin::sink_defs_by_kind(self.kind())
+    }
 }
 
 #[cfg(test)]

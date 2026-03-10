@@ -20,6 +20,22 @@ pub fn builtin_sink_defs() -> Vec<ConnectorDef> {
         });
     }
 
+    // arrow-tcp alias
+    {
+        let mut params = ParamMap::new();
+        params.insert("target".into(), json!("tcp://127.0.0.1:9800"));
+        params.insert("tag".into(), json!("default"));
+        params.insert("fields".into(), json!([]));
+        defs.push(ConnectorDef {
+            id: "arrow_tcp_sink".into(),
+            kind: "arrow-ipc".into(),
+            scope: ConnectorScope::Sink,
+            allow_override: vec!["target".into(), "tag".into(), "fields".into()],
+            default_params: params,
+            origin: Some("builtin:arrow_tcp_sink".into()),
+        });
+    }
+
     // arrow-file
     {
         let mut params = ParamMap::new();

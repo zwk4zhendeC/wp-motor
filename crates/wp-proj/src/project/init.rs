@@ -496,6 +496,14 @@ mod tests {
             connector_template_exists(work_root.join(CONNECTORS_SINK_DIR), "file_json_sink"),
             "file sink connector should exist"
         );
+        assert!(
+            connector_template_exists(work_root.join(CONNECTORS_SINK_DIR), "arrow_file_sink"),
+            "arrow file sink connector should exist"
+        );
+        assert!(
+            connector_template_exists(work_root.join(CONNECTORS_SINK_DIR), "arrow_tcp_sink"),
+            "arrow tcp sink connector should exist"
+        );
     }
 
     #[test]

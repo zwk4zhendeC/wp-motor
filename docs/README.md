@@ -106,6 +106,18 @@ docs/
 
 **适用人群**: WP-Motor 核心开发者、OML/WPL 扩展开发者
 
+## 🏗 设计文档 (design/)
+
+面向架构演进、运行时机制调整和跨模块改造的设计文档。
+
+- **[WPL / OML / KnowDB 低中断更新设计](design/runtime_hot_reload_design.md)** ⭐ 重要
+  - 以“十秒内无感”为目标的运行时更新方案
+  - 当前实现：`P1` 预构建后切换，`PID` 不变
+  - 优先 graceful drain，超时 fallback 到 force replace
+  - 包含更新语义、失败处理、测试要求与观测点
+
+**适用人群**: 核心开发者、架构评审者、运行时改造参与者
+
 ## 🔍 快速导航
 
 ### 我想了解 WPL 字段引用的使用
@@ -128,6 +140,9 @@ docs/
 
 ### 我想开发一个新的 OML pipe function
 → [OML PipeFun 开发指南](guide/oml_pipefun_development_guide.md)
+
+### 我想 review 低中断更新方案
+→ [WPL / OML / KnowDB 低中断更新设计](design/runtime_hot_reload_design.md)
 
 ## 📝 文档规范
 
@@ -172,6 +187,8 @@ docs/
 
 ## 📅 最近更新
 
+- **2026-03-11**: 更新 `WPL / OML / KnowDB` 运行时更新设计，明确当前实现为 `P1`
+- **2026-03-10**: 添加 `WPL / OML / KnowDB` 运行时热更新设计文档
 - **2026-02-01**: 添加 OML 完整文档（使用总览 + 19 个 PipeFun 参考）
 - **2026-02-01**: 添加 NLP 函数文档（extract_main_word + extract_subject_object）
 - **2026-01-29**: 添加字段引用使用指南（@'@special-field' 单引号支持）
@@ -197,4 +214,4 @@ docs/
 ---
 
 **维护者**: WP-Motor Team
-**最后更新**: 2026-02-01
+**最后更新**: 2026-03-11

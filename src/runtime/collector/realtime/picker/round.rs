@@ -74,6 +74,7 @@ impl RoundStat {
         self.dist_status = DistStatus::Ready
     }
     #[inline]
+    #[allow(dead_code)]
     #[allow(clippy::wrong_self_convention)]
     pub fn to_dist_terminal(&mut self) {
         self.dist_status = DistStatus::Terminal

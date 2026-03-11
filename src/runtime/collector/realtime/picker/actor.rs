@@ -1,8 +1,7 @@
 use crate::runtime::collector::realtime::constants::PICKER_PENDING_CAPACITY;
 use crate::runtime::collector::realtime::picker::policy::PostPolicy;
 use crate::runtime::collector::realtime::picker::policy::PullPolicy;
-use crate::runtime::parser::workflow::ParseWorkerSender;
-use crate::utils::rolling_queue::RollingQueue;
+use crate::runtime::parser::workflow::ParseDispatchRouter;
 use std::collections::VecDeque;
 
 use wp_connector_api::SourceBatch;
@@ -13,7 +12,7 @@ use wp_connector_api::SourceBatch;
 #[get_mut = "pub"]
 pub struct JMActPicker {
     #[get = "pub"]
-    parse_roller: RollingQueue<ParseWorkerSender>,
+    parse_router: ParseDispatchRouter,
     pending: VecDeque<SourceBatch>,
     #[get_mut = "pub"]
     post_policy: PostPolicy,
@@ -24,22 +23,10 @@ pub struct JMActPicker {
 impl JMActPicker {
     /// 创建 ActPicker，并一次性注入解析订阅者集合（推荐）。
     /// 使用空集合可创建“无订阅者”的 picker。
-    pub fn new<I>(parsers: I) -> Self
-    where
-        I: IntoIterator<Item = ParseWorkerSender>,
-    {
-        let mut parse_roller = RollingQueue::new();
-        for p in parsers {
-            parse_roller.append(p);
-        }
-        // DBC: 解析订阅者集合不得为空
-        debug_assert!(
-            !parse_roller.is_empty(),
-            "ActPicker requires at least 1 parse subscriber"
-        );
+    pub fn new(parse_router: ParseDispatchRouter) -> Self {
         let burst = Self::burst_max();
         Self {
-            parse_roller,
+            parse_router,
             pending: VecDeque::with_capacity(PICKER_PENDING_CAPACITY),
             post_policy: PostPolicy::new(burst),
             pull_policy: PullPolicy::new(burst),

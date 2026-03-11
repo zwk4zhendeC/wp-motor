@@ -2,6 +2,7 @@ use crate::core::parser::{ParseOption, WplPipeline};
 use crate::orchestrator::config::build_sinks::dat_channel_max;
 use crate::orchestrator::engine::resource::EngineResource;
 use crate::runtime::actor::TaskGroup;
+use crate::runtime::actor::command::ActorCtrlCmd;
 use crate::runtime::actor::signal::ShutdownCmd;
 use crate::runtime::parser::act_parser::ActParser;
 use crate::runtime::parser::workflow::{ActorWork, ParseWorkerSender};
@@ -44,7 +45,15 @@ pub async fn start_parser_tasks_frames(
     for _ in 0..args.parallel {
         let (dat_s, dat_r): (EventBatchSend, EventBatchRecv) =
             hold_channel.channel(dat_channel_max());
-        let actuator = parser_factory.build().await?;
+        let actuator = match parser_factory.build().await {
+            Ok(actuator) => actuator,
+            Err(err) => {
+                let _ = parser_group
+                    .wait_grace_down(Some(ActorCtrlCmd::Stop(ShutdownCmd::Immediate)))
+                    .await;
+                return Err(err);
+            }
+        };
         // 使用通用的 ActorWork（定义在 runtime/parser/workflow.rs）
         // 代替在函数内部临时定义的 ActorFrameWork，避免重复与每轮循环重新定义类型。
         let mut worker = ActorWork::new(

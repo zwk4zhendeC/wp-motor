@@ -29,16 +29,20 @@ impl JMActPicker {
         let pending_before_pull = self.pending_count();
         let pull_plan = self.pull_policy().plan_pull(pending_before_pull);
         if pull_plan.allow() {
-            let status = self
-                .fetch_into_pending(source, task_ctrl, pull_plan.fetch_budget(), timeout)
-                .await?;
-            trace_ctrl!(
-                "{}-picker fetch status={:?} pending_after={}",
-                source.identifier(),
-                status,
-                self.pending_count()
-            );
-            rs.up_src_status(status);
+            if task_ctrl.not_alone() {
+                let status = self
+                    .fetch_into_pending(source, task_ctrl, pull_plan.fetch_budget(), timeout)
+                    .await?;
+                trace_ctrl!(
+                    "{}-picker fetch status={:?} pending_after={}",
+                    source.identifier(),
+                    status,
+                    self.pending_count()
+                );
+                rs.up_src_status(status);
+            } else {
+                rs.up_src_status(SrcStatus::Miss);
+            }
         }
 
         // 若源侧终止，则倾向“清空 pending”后尽快退出（full_post=true）
@@ -72,8 +76,7 @@ impl JMActPicker {
 
     /// 每轮 burst 完结后的收尾：仅轮转一次，保持块状分发的公平性
     pub(super) fn finish_burst_round(&mut self) {
-        // 仅轮转一次，维持“块状发送 + 公平轮转”策略，避免单订阅者长期饥饿
-        self.parse_roller_mut().roll();
+        // ParseDispatchRouter 自带轮询索引，这里无需额外 roll。
     }
 
     /// 非阻塞拉取一次控制命令；返回是否应停止
@@ -90,7 +93,7 @@ impl JMActPicker {
 mod tests {
     use super::*;
     use crate::runtime::actor::command::ActorCtrlCmd;
-    use crate::runtime::parser::workflow::ParseWorkerSender;
+    use crate::runtime::parser::workflow::{ParseDispatchRouter, ParseWorkerSender};
     use crate::sources::event_id::next_event_id;
     use async_broadcast::broadcast;
     use async_trait::async_trait;
@@ -215,7 +218,9 @@ mod tests {
     #[tokio::test]
     async fn round_pick_processes_pending_and_fetches_new_batches() {
         let (parse_tx, mut parse_rx) = mpsc::channel::<SourceBatch>(TEST_PARSE_CHANNEL_CAP);
-        let mut picker = JMActPicker::new(vec![ParseWorkerSender::new(parse_tx)]);
+        let mut picker = JMActPicker::new(ParseDispatchRouter::new(vec![ParseWorkerSender::new(
+            parse_tx,
+        )]));
 
         // 预先放入一个 pending 批次，确保本轮需要发送历史 backlog
         picker.extend_pending(vec![make_event("pending")]);
@@ -257,7 +262,9 @@ mod tests {
     #[tokio::test]
     async fn round_pick_drains_pending_on_terminal_status() {
         let (parse_tx, mut parse_rx) = mpsc::channel::<SourceBatch>(TEST_PARSE_CHANNEL_CAP);
-        let mut picker = JMActPicker::new(vec![ParseWorkerSender::new(parse_tx)]);
+        let mut picker = JMActPicker::new(ParseDispatchRouter::new(vec![ParseWorkerSender::new(
+            parse_tx,
+        )]));
 
         struct TerminalSource;
         #[async_trait]

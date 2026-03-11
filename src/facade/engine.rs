@@ -4,7 +4,7 @@ use futures_lite::StreamExt;
 use orion_variate::EnvDict;
 use std::path::Path;
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::timeout;
 use wp_knowledge::facade::init_thread_cloned_from_knowdb;
@@ -23,9 +23,11 @@ use crate::orchestrator::config::loader::WarpConf;
 use crate::orchestrator::config::models::{load_warp_engine_confs, stat_reqs_from};
 use crate::orchestrator::engine::resource::EngineResource;
 use crate::orchestrator::engine::resource::WarpResourceBuilder;
-use crate::orchestrator::engine::service::start_warp_service;
+use crate::orchestrator::engine::service::{
+    EngineRuntime, start_processing_tasks, start_warp_service,
+};
 use crate::resources::core::manager::ResManager;
-use crate::runtime::actor::{self, ExitPolicyKind, TaskManager};
+use crate::runtime::actor::{self, ExitPolicyKind};
 use crate::runtime::sink::act_sink::SinkService;
 use crate::runtime::sink::infrastructure::InfraSinkService;
 use crate::sources::SourceConfigParser;
@@ -33,6 +35,11 @@ use crate::utils::process::PidRec;
 use wp_conf::constants;
 use wp_conf::engine::EngineConfig;
 use wp_ctrl_api::CommandType;
+
+#[cfg(test)]
+const P0_RELOAD_DRAIN_TIMEOUT: Duration = Duration::from_millis(300);
+#[cfg(not(test))]
+const P0_RELOAD_DRAIN_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// wparse 应用入口：对外隐藏内部装配细节
 pub struct WpApp {
@@ -103,7 +110,7 @@ impl WpApp {
         &mut self,
         run_mode: RunMode,
         env_dict: &EnvDict,
-    ) -> RunResult<TaskManager> {
+    ) -> RunResult<EngineRuntime> {
         // 保持 PID 文件在进程生命周期内存在
         self.pid_guard = Some(PidRec::current(
             self.conf_manager.runtime_path("wparse.pid").as_str(),
@@ -152,6 +159,55 @@ impl WpApp {
         Ok(task_manager)
     }
 
+    async fn reload_processing_p0(&mut self, runtime: &mut EngineRuntime) -> RunResult<()> {
+        info_ctrl!("start runtime reload P0");
+        let eng_res = load_processing_res(
+            &self.main_conf,
+            &self.conf_manager,
+            self.stat_reqs.clone(),
+            &self.env_dict,
+        )
+        .await?;
+        let processing = start_processing_tasks(
+            &self.run_args,
+            eng_res,
+            runtime.monitor_sender(),
+            &self.stat_reqs,
+        )
+        .await?;
+        let mut pending_processing = Some(processing);
+        let deadline = Instant::now() + P0_RELOAD_DRAIN_TIMEOUT;
+
+        if let Err(err) = runtime.isolate_picker().await {
+            if let Some(processing) = pending_processing.take() {
+                let _ = processing.shutdown_unused().await;
+            }
+            return Err(err);
+        }
+        runtime.disconnect_parse_router();
+        if let Err(err) = runtime.wait_processing_drained(deadline).await {
+            warn_ctrl!(
+                "runtime reload P0 graceful drain timed out or failed, fallback to force replace: {}",
+                err
+            );
+            if let Err(force_err) = runtime.force_stop_processing().await {
+                if let Some(processing) = pending_processing.take() {
+                    let _ = processing.shutdown_unused().await;
+                }
+                return Err(force_err);
+            }
+        }
+
+        runtime.install_processing_tasks(
+            pending_processing
+                .take()
+                .expect("pending processing should exist before install"),
+        );
+        runtime.resume_picker().await?;
+        info_ctrl!("runtime reload P0 done");
+        Ok(())
+    }
+
     /// 运行主循环：处理信号与控制面热重载
     async fn engine_working(&mut self, run_mode: RunMode) -> RunResult<()> {
         let mut signals = actor::signal::stop_signals()?;
@@ -167,14 +223,15 @@ impl WpApp {
         if self.bus_enabled {
             loop {
                 tokio::select! {
-                    /*
-                    Some(_) = self.cmd_recv.recv() => {
-                        info_ctrl!("wparse engine reloading...");
-                        task_admin.all_down_force_policy(exit_policy).await?;
-                        self.start_service(run_mode.clone()).await?;
-                        info_ctrl!("wparse engine reload done!");
+                    Some(cmd) = self.cmd_recv.recv() => {
+                        match cmd {
+                            CommandType::LoadModel => {
+                                if let Err(err) = self.reload_processing_p0(&mut task_admin).await {
+                                    warn_ctrl!("runtime reload P0 failed: {}", err);
+                                }
+                            }
+                        }
                     }
-                    */
                     stop = async {
                         if let Ok(Some(_)) = timeout(Duration::from_millis(100), signals.next()).await {
                             info_ctrl!("recv signal, stop all routine!");
@@ -183,9 +240,7 @@ impl WpApp {
                         false
                     } => {
                         if stop {
-                            task_admin
-                                .all_down_wait_policy_with_signal(exit_policy, true)
-                                .await?;
+                            task_admin.shutdown_with_signal(exit_policy, true).await?;
                             break;
                         }
                     }
@@ -193,7 +248,7 @@ impl WpApp {
                 }
             }
         } else {
-            task_admin.all_down_wait_policy(exit_policy).await?;
+            task_admin.shutdown(exit_policy).await?;
         }
         Ok(())
     }
@@ -327,6 +382,112 @@ async fn load_engine_res(
         .with_sink_coordinator(sink_service)
         .with_acceptors(acceptor_inits)
         .with_sources(source_inits)
+        .with_knowdb_handler(knowdb_handler);
+    ctx.mark_suc();
+    Ok(builder.build_unchecked())
+}
+
+async fn load_processing_res(
+    main_conf: &EngineConfig,
+    conf_manager: &WarpConf,
+    stat_reqs: StatRequires,
+    env_dict: &EnvDict,
+) -> RunResult<EngineResource> {
+    let mut ctx = OperationContext::want("load-processing-res").with_auto_log();
+    let knowdb_path =
+        Path::new(conf_manager.work_root_path().as_str()).join("models/knowledge/knowdb.toml");
+    let mut knowdb_handler = None;
+    if knowdb_path.exists() {
+        let auth_file = PathBuf::from(conf_manager.runtime_path("authority.sqlite"));
+        let _ = std::fs::remove_file(&auth_file);
+        let authority_uri = format!("file:{}?mode=rwc&uri=true", auth_file.display());
+        match init_thread_cloned_from_knowdb(
+            Path::new(conf_manager.work_root_path().as_str()),
+            &knowdb_path,
+            &authority_uri,
+            env_dict,
+        ) {
+            Ok(_) => {
+                let handler = crate::knowledge::KnowdbHandler::new(
+                    Path::new(conf_manager.work_root_path().as_str()),
+                    &knowdb_path,
+                    &authority_uri,
+                    env_dict,
+                );
+                handler.mark_initialized();
+                knowdb_handler = Some(handler);
+            }
+            Err(err) => {
+                warn_ctrl!("init knowdb skipped ({}): {}", knowdb_path.display(), err);
+            }
+        }
+    } else {
+        warn_ctrl!(
+            "models/knowledge/knowdb.toml not found under {}; skip knowdb init",
+            conf_manager.work_root_path()
+        );
+    }
+
+    let infra_sinks = InfraSinkService::default_ins(
+        main_conf.sinks_root(),
+        main_conf.rescue_root(),
+        stat_reqs.get_requ_items(StatStage::Sink),
+        env_dict,
+    )
+    .await?;
+
+    let mut res_center = ResManager::build(main_conf, &infra_sinks, env_dict).await?;
+    let sink_service = SinkService::async_sinks_spawn(
+        main_conf.rescue_root().to_string(),
+        res_center.must_get_sink_table()?,
+        &res_center,
+        stat_reqs.get_requ_items(StatStage::Sink),
+        main_conf.speed_limit(),
+    )
+    .await?;
+
+    res_center.ins_engine_res(
+        sink_service.agent(),
+        stat_reqs.get_requ_items(StatStage::Parse),
+    )?;
+
+    let res_path = conf_manager.runtime_path("rule_mapping.dat");
+    if Path::new(&res_path).exists() {
+        std::fs::remove_file(&res_path).owe_res()?;
+    }
+
+    let wpl_rule_cnt = res_center
+        .wpl_index()
+        .as_ref()
+        .map(|idx| idx.rule_key().len())
+        .unwrap_or(0);
+    if wpl_rule_cnt == 0 {
+        warn_ctrl!(
+            "rule_mapping.dat 生成时未找到任何 WPL 规则，请检查 [models].wpl 或 --wpl-dir 配置 (当前: {})",
+            main_conf.rule_root()
+        );
+        println!(
+            "rule_mapping.dat 生成时未找到任何 WPL 规则，请检查 [models].wpl 或 --wpl-dir 配置 (当前: {})",
+            main_conf.rule_root()
+        );
+    }
+    if res_center.name_mdl_res().is_empty() {
+        warn_ctrl!(
+            "rule_mapping.dat 生成时未加载任何 OML 模型，请检查 [models].oml 配置 (当前: {})",
+            main_conf.oml_root()
+        );
+        println!(
+            "rule_mapping.dat 生成时未加载任何 OML 模型，请检查 [models].oml 配置 (当前: {})",
+            main_conf.oml_root()
+        );
+    }
+
+    wp_conf::utils::save_data(Some(res_center.to_string()), res_path.as_str(), true).owe_res()?;
+
+    let builder = WarpResourceBuilder::new()
+        .with_infra(infra_sinks)
+        .with_resource_manager(res_center)
+        .with_sink_coordinator(sink_service)
         .with_knowdb_handler(knowdb_handler);
     ctx.mark_suc();
     Ok(builder.build_unchecked())

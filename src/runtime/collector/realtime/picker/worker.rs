@@ -7,7 +7,7 @@ use crate::runtime::collector::realtime::constants::{
 };
 use crate::runtime::collector::realtime::picker::round::{RoundStat, SrcStatus};
 // stop_routine_run/err4_dispatch_data 仅在 dispatch.rs 中使用
-use crate::runtime::parser::workflow::ParseWorkerSender;
+use crate::runtime::parser::workflow::ParseDispatchRouter;
 use crate::runtime::prelude::*;
 use crate::stat::metric_collect::MetricCollectors;
 use crate::stat::{MonSend, STAT_INTERVAL_MS};
@@ -30,7 +30,7 @@ impl SourceWorker {
         speed_limit: usize,
         max_count: Option<usize>,
         mon_s: MonSend,
-        parse_senders: Vec<ParseWorkerSender>,
+        parse_router: ParseDispatchRouter,
     ) -> Self {
         // 0 表示不限速；其余情况下由 TaskController 进行节流
         let limit = if speed_limit == 0 {
@@ -38,7 +38,7 @@ impl SourceWorker {
         } else {
             Some(speed_limit)
         };
-        let picker = JMActPicker::new(parse_senders);
+        let picker = JMActPicker::new(parse_router);
         Self {
             picker,
             speed_limit: limit,
@@ -294,7 +294,7 @@ mod tests {
     use super::*;
     use crate::runtime::actor::command::ActorCtrlCmd;
     use crate::runtime::actor::signal::ShutdownCmd;
-    use crate::runtime::parser::workflow::ParseWorkerSender;
+    use crate::runtime::parser::workflow::{ParseDispatchRouter, ParseWorkerSender};
     use crate::sources::event_id::next_event_id;
     use async_broadcast::broadcast;
     use async_trait::async_trait;
@@ -334,14 +334,24 @@ mod tests {
     ) {
         let (mon_tx, mon_rx) = mpsc::channel::<ReportVariant>(TEST_MONITOR_CHANNEL_CAP);
         let (parse_tx, parse_rx) = mpsc::channel::<SourceBatch>(TEST_PARSE_CHANNEL_CAP);
-        let worker = SourceWorker::new(0, None, mon_tx, vec![ParseWorkerSender::new(parse_tx)]);
+        let worker = SourceWorker::new(
+            0,
+            None,
+            mon_tx,
+            ParseDispatchRouter::new(vec![ParseWorkerSender::new(parse_tx)]),
+        );
         (worker, mon_rx, parse_rx)
     }
 
     fn worker_with_speed_limit(limit: usize) -> SourceWorker {
         let (mon_tx, _mon_rx) = mpsc::channel::<ReportVariant>(TEST_MONITOR_CHANNEL_CAP);
         let (parse_tx, _parse_rx) = mpsc::channel::<SourceBatch>(TEST_MONITOR_CHANNEL_CAP);
-        SourceWorker::new(limit, None, mon_tx, vec![ParseWorkerSender::new(parse_tx)])
+        SourceWorker::new(
+            limit,
+            None,
+            mon_tx,
+            ParseDispatchRouter::new(vec![ParseWorkerSender::new(parse_tx)]),
+        )
     }
 
     #[test]

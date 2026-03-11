@@ -124,6 +124,7 @@ fn map_ctrl_cmd(cmd: ActorCtrlCmd) -> Option<ControlEvent> {
     match cmd {
         ActorCtrlCmd::Stop(_) => Some(ControlEvent::Stop),
         ActorCtrlCmd::Isolate => Some(ControlEvent::Isolate(true)),
+        ActorCtrlCmd::Execute(TaskScope::All) => Some(ControlEvent::Isolate(false)),
         _ => None,
     }
 }

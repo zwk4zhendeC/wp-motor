@@ -1,7 +1,7 @@
 use crate::runtime::actor::TaskGroup;
 use crate::runtime::actor::signal::ShutdownCmd;
 use crate::runtime::collector::realtime::SourceWorker;
-use crate::runtime::parser::workflow::ParseWorkerSender;
+use crate::runtime::parser::workflow::ParseDispatchRouter;
 use crate::stat::MonSend;
 use wp_conf::RunArgs;
 use wp_connector_api::SourceHandle;
@@ -14,7 +14,7 @@ pub fn start_picker_tasks(
     run_args: &RunArgs,
     all_sources: Vec<SourceHandle>,
     mon_send: MonSend,
-    parse_senders: Vec<ParseWorkerSender>,
+    parse_router: ParseDispatchRouter,
     stat_reqs: &StatRequires,
 ) -> TaskGroup {
     let mut picker_group = TaskGroup::new("picker", ShutdownCmd::Immediate);
@@ -24,7 +24,7 @@ pub fn start_picker_tasks(
             run_args.speed_limit,
             run_args.line_max,
             mon_send.clone(),
-            parse_senders.clone(),
+            parse_router.clone(),
         );
         let cmd_sub = picker_group.subscribe();
         let c_args = run_args.clone();

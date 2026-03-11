@@ -5,10 +5,10 @@ use crate::runtime::collector::realtime::constants::{
 use crate::runtime::collector::realtime::picker::round::RoundStat;
 
 use crate::runtime::actor::command::TaskController;
+use crate::runtime::parser::workflow::ParseDispatchResult;
 use crate::sample_log_with_hits;
 use crate::stat::metric_collect::MetricCollectors;
 // stride uses crate::LOG_SAMPLE_STRIDE globally; no per-site stride import here
-use tokio::sync::mpsc::error::TrySendError;
 use wp_connector_api::SourceBatch;
 
 // 轻量背压观测：按固定步长抽样打印（宏内部维护静态计数器）
@@ -49,51 +49,42 @@ impl JMActPicker {
 
             let event_cnt = payload.len();
             let mut pending_payload = Some(payload);
-            let max_tries = self.parse_roller().len().max(1); // 最多轮转一圈，保持公平
+            let Some(batch_to_send) = pending_payload.take() else {
+                return rs;
+            };
 
-            'roll: for _ in 0..max_tries {
-                if let Some(parser) = self.parse_roller().cur() {
-                    let Some(batch_to_send) = pending_payload.take() else {
-                        break 'roll;
-                    };
-                    match parser.dat_s.try_send(batch_to_send) {
-                        Ok(()) => {
-                            // 成功：统计+轮转，下一个批次
-                            stat_ext.record_task_batch(src_key, event_cnt);
-                            rs.add_proc(1);
-                            task_ctrl.rec_task_suc_cnt(event_cnt);
-                            self.parse_roller_mut().roll();
-                            delivered += 1;
-                            break 'roll;
-                        }
-                        Err(TrySendError::Full(batch)) => {
-                            // 解析通道满：回填批次并轮转后重试
-                            pending_payload = Some(batch);
-                            self.parse_roller_mut().roll();
-                            let pend = self.pending_count();
-                            sample_log_with_hits!(
-                                PARSE_CH_FULL_HITS,
-                                warn_mtrc,
-                                "backpressure: parse channel full, pending_batches={}, last_batch_events={}",
-                                pend,
-                                event_cnt
-                            );
-                        }
-                        Err(TrySendError::Closed(_batch)) => {
-                            rs.to_dist_terminal();
-                            // 理论上 parse 端不应关闭；若关闭，终止本轮并由上层决定退出。
-                            // TODO: 如需具备容错，可在外层替换/剔除关闭的订阅者。
-                            unimplemented!()
-                        }
-                    }
+            match self.parse_router().try_send_round_robin(batch_to_send) {
+                ParseDispatchResult::Sent => {
+                    stat_ext.record_task_batch(src_key, event_cnt);
+                    rs.add_proc(1);
+                    task_ctrl.rec_task_suc_cnt(event_cnt);
+                    delivered += 1;
                 }
-            }
-
-            // 一圈尝试仍失败：将批次放回队头，标记 Pending，交由上层在下一轮再试
-            if let Some(batch) = pending_payload {
-                self.set_pending_front(batch);
-                rs.to_dist_pending();
-                break;
+                ParseDispatchResult::Full(batch) => {
+                    self.set_pending_front(batch);
+                    rs.to_dist_pending();
+                    let pend = self.pending_count();
+                    sample_log_with_hits!(
+                        PARSE_CH_FULL_HITS,
+                        warn_mtrc,
+                        "backpressure: parse channel full, pending_batches={}, last_batch_events={}",
+                        pend,
+                        event_cnt
+                    );
+                    break;
+                }
+                ParseDispatchResult::Reloading(batch) => {
+                    self.set_pending_front(batch);
+                    // reload 期间 parse router 会被主动断开；此时保留 pending，等待新 parser 接回。
+                    rs.to_dist_pending();
+                    break;
+                }
+                ParseDispatchResult::Closed(batch) => {
+                    self.set_pending_front(batch);
+                    // 非 reload 场景下所有 parser sender 都已关闭，按终止处理以暴露故障。
+                    rs.to_dist_terminal();
+                    break;
+                }
             }
         }
         rs
@@ -103,7 +94,7 @@ impl JMActPicker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime::parser::workflow::ParseWorkerSender;
+    use crate::runtime::parser::workflow::{ParseDispatchRouter, ParseWorkerSender};
     use crate::sources::event_id::next_event_id;
     use async_broadcast::broadcast;
     use std::sync::Arc;
@@ -141,10 +132,10 @@ mod tests {
     fn handle_pending_batch_sends_up_to_batch_size() {
         let (parse_a, mut recv_a) = mpsc::channel::<SourceBatch>(TEST_PARSE_CHANNEL_CAP);
         let (parse_b, mut recv_b) = mpsc::channel::<SourceBatch>(TEST_PARSE_CHANNEL_CAP);
-        let mut picker = JMActPicker::new(vec![
+        let mut picker = JMActPicker::new(ParseDispatchRouter::new(vec![
             ParseWorkerSender::new(parse_a),
             ParseWorkerSender::new(parse_b),
-        ]);
+        ]));
 
         picker.extend_pending(vec![make_event("b1")]);
         picker.extend_pending(vec![make_event("b2")]);
@@ -172,7 +163,9 @@ mod tests {
     #[test]
     fn handle_pending_batch_requeues_on_backpressure() {
         let (parse_tx, mut recv) = mpsc::channel::<SourceBatch>(TEST_SINGLE_CHANNEL_CAP);
-        let mut picker = JMActPicker::new(vec![ParseWorkerSender::new(parse_tx.clone())]);
+        let mut picker = JMActPicker::new(ParseDispatchRouter::new(vec![ParseWorkerSender::new(
+            parse_tx.clone(),
+        )]));
 
         let pending = vec![make_event("retry")];
         picker.extend_pending(pending);

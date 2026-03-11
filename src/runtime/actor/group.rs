@@ -1,4 +1,4 @@
-use crate::runtime::actor::command::{ActorCtrlCmd, CmdPublisher, CmdSubscriber};
+use crate::runtime::actor::command::{ActorCtrlCmd, CmdPublisher, CmdSubscriber, TaskScope};
 use crate::runtime::actor::signal::ShutdownCmd;
 use async_broadcast::broadcast;
 use derive_getters::Getters;
@@ -43,6 +43,12 @@ impl TaskGroup {
         let cmd = ActorCtrlCmd::Isolate;
         info_ctrl!("{} broadcast cmd :{:?}", self.name, cmd);
         self.cmd_pub.broadcast(cmd.clone()).await.owe_sys()?;
+        Ok(())
+    }
+    pub async fn cmd_execute_all(&self) -> RunResult<()> {
+        let cmd = ActorCtrlCmd::Execute(TaskScope::All);
+        info_ctrl!("{} broadcast cmd :{:?}", self.name, cmd);
+        self.cmd_pub.broadcast(cmd).await.owe_sys()?;
         Ok(())
     }
     pub async fn cmd_stop_now(&self) -> RunResult<()> {
@@ -93,6 +99,22 @@ impl TaskGroup {
             index += 1;
         }
         info_ctrl!("{} group routines end", self.name);
+        Ok(())
+    }
+
+    pub async fn wait_finished(&mut self) -> RunResult<()> {
+        let mut ctx = WithContext::want("wait routine group finished");
+        ctx.record("group", self.name.clone());
+        let mut index = 0;
+        while let Some(h) = self.handles.pop() {
+            if !h.is_finished() {
+                info_ctrl!("{} group routines [{}] wait finished... ", self.name, index);
+                h.await.owe_sys().with(&ctx)?;
+            }
+            debug_ctrl!("{} group routines[{}] finished end", self.name, index);
+            index += 1;
+        }
+        info_ctrl!("{} group routines finished", self.name);
         Ok(())
     }
 

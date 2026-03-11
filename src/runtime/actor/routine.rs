@@ -35,6 +35,89 @@ impl TaskManager {
         self.role_groups.push(RoleTaskGroup { role, group });
     }
 
+    pub async fn isolate_role(&self, role: TaskRole) -> RunResult<()> {
+        for rg in &self.role_groups {
+            if rg.role == role && !rg.group.routin_is_finished() {
+                rg.group.cmd_alone().await?;
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn execute_role_all(&self, role: TaskRole) -> RunResult<()> {
+        for rg in &self.role_groups {
+            if rg.role == role && !rg.group.routin_is_finished() {
+                rg.group.cmd_execute_all().await?;
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn stop_role(&mut self, role: TaskRole, stop: ShutdownCmd) -> RunResult<()> {
+        let mut kept = Vec::with_capacity(self.role_groups.len());
+        for mut rg in self.role_groups.drain(..) {
+            if rg.role == role {
+                rg.group
+                    .wait_grace_down(Some(ActorCtrlCmd::Stop(stop.clone())))
+                    .await?;
+                info_ctrl!(
+                    "role group {:?}({}) stopped and removed",
+                    rg.role,
+                    rg.group.name()
+                );
+            } else {
+                kept.push(rg);
+            }
+        }
+        self.role_groups = kept;
+        Ok(())
+    }
+
+    pub async fn wait_role_groups_finished(
+        &mut self,
+        role: TaskRole,
+        wait_timeout: Duration,
+    ) -> RunResult<()> {
+        let started_at = Instant::now();
+        loop {
+            let mut all_finished = true;
+            let mut has_role = false;
+            for rg in &self.role_groups {
+                if rg.role != role {
+                    continue;
+                }
+                has_role = true;
+                if !rg.group.routin_is_finished() {
+                    all_finished = false;
+                    break;
+                }
+            }
+            if !has_role || all_finished {
+                break;
+            }
+            if started_at.elapsed() >= wait_timeout {
+                return Err(RunReason::from_logic().to_err());
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+
+        let mut kept = Vec::with_capacity(self.role_groups.len());
+        for mut rg in self.role_groups.drain(..) {
+            if rg.role == role {
+                rg.group.wait_finished().await?;
+                info_ctrl!(
+                    "role group {:?}({}) finished and removed",
+                    rg.role,
+                    rg.group.name()
+                );
+            } else {
+                kept.push(rg);
+            }
+        }
+        self.role_groups = kept;
+        Ok(())
+    }
+
     pub async fn all_down_wait_policy(&mut self, policy_kind: ExitPolicyKind) -> RunResult<()> {
         self.all_down_wait_policy_with_signal(policy_kind, false)
             .await

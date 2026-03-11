@@ -1,5 +1,5 @@
 use crate::runtime::{
-    actor::command::TaskController,
+    actor::command::{ActorCtrlCmd, TaskController},
     collector::realtime::{JMActPicker, picker::round::SrcStatus},
     errors::err4_dispatch_data,
 };
@@ -143,14 +143,28 @@ impl JMActPicker {
                     match cmd {
                         Ok(cmd) => {
                             task_ctrl.update_cmd(cmd);
-                            status = SrcStatus::Terminal;
-                            info_ctrl!(
-                                "{}-picker received control cmd during blocking fetch: {:?} (pending_cnt={})",
-                                source.identifier(),
-                                task_ctrl.work_cmd(),
-                                self.pending_count()
-                            );
-                            break;
+                            match task_ctrl.work_cmd() {
+                                ActorCtrlCmd::Stop(_) => {
+                                    status = SrcStatus::Terminal;
+                                    info_ctrl!(
+                                        "{}-picker received stop cmd during blocking fetch: {:?} (pending_cnt={})",
+                                        source.identifier(),
+                                        task_ctrl.work_cmd(),
+                                        self.pending_count()
+                                    );
+                                    break;
+                                }
+                                ActorCtrlCmd::Isolate => {
+                                    status = SrcStatus::Miss;
+                                    info_ctrl!(
+                                        "{}-picker received isolate cmd during blocking fetch (pending_cnt={})",
+                                        source.identifier(),
+                                        self.pending_count()
+                                    );
+                                    break;
+                                }
+                                _ => continue,
+                            }
                         }
                         Err(RecvError::Closed) => {
                             cmd_closed = true;
@@ -209,7 +223,10 @@ impl JMActPicker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime::{actor::command::TaskController, parser::workflow::ParseWorkerSender};
+    use crate::runtime::{
+        actor::command::TaskController,
+        parser::workflow::{ParseDispatchRouter, ParseWorkerSender},
+    };
     use crate::sources::event_id::next_event_id;
     use async_broadcast::broadcast;
     use async_trait::async_trait;
@@ -396,7 +413,8 @@ mod tests {
     #[tokio::test]
     async fn fetch_into_pending_skips_when_no_budget() {
         let (tx, _rx) = mpsc::channel::<SourceBatch>(TEST_SINGLE_SOURCE_CHANNEL_CAP);
-        let mut picker = JMActPicker::new(vec![ParseWorkerSender::new(tx)]);
+        let mut picker =
+            JMActPicker::new(ParseDispatchRouter::new(vec![ParseWorkerSender::new(tx)]));
         let mut ctrl = make_task_ctrl();
         let mut src = SpyNoopSource::new();
 
@@ -417,7 +435,8 @@ mod tests {
     #[tokio::test]
     async fn fetch_into_pending_extends_pending_in_try_mode() {
         let (tx, _rx) = mpsc::channel::<SourceBatch>(TEST_SOURCE_CHANNEL_CAP);
-        let mut picker = JMActPicker::new(vec![ParseWorkerSender::new(tx)]);
+        let mut picker =
+            JMActPicker::new(ParseDispatchRouter::new(vec![ParseWorkerSender::new(tx)]));
         let mut ctrl = make_task_ctrl();
 
         let batches = vec![
@@ -447,7 +466,8 @@ mod tests {
     #[tokio::test]
     async fn fetch_into_pending_records_wait_in_blocking_mode() {
         let (tx, _rx) = mpsc::channel::<SourceBatch>(TEST_SMALL_SOURCE_CHANNEL_CAP);
-        let mut picker = JMActPicker::new(vec![ParseWorkerSender::new(tx)]);
+        let mut picker =
+            JMActPicker::new(ParseDispatchRouter::new(vec![ParseWorkerSender::new(tx)]));
         let mut ctrl = make_task_ctrl();
         let mut src = SlowBlockingSource::new(Duration::from_millis(TEST_SLOW_SOURCE_DELAY_MS));
 

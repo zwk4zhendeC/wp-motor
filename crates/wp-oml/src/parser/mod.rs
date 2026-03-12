@@ -5,6 +5,7 @@ pub mod error;
 mod fmt_prm;
 mod fun_prm;
 pub mod keyword;
+mod lookup_prm;
 mod map_prm;
 mod match_prm;
 mod oml_acq;

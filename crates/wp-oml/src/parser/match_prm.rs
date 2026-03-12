@@ -217,6 +217,7 @@ fn cond_fun(data: &mut &str) -> WResult<MatchCond> {
         "regex_match",
         "is_empty",
         "iequals",
+        "iequals_any",
         "gt",
         "lt",
         "eq",
@@ -745,6 +746,27 @@ Result = match read(status) {
         assert_eq!(
             target10.field("Result").map(|s| s.as_field()),
             Some(&expect10)
+        );
+
+        // Test iequals_any
+        let mut conf11 = r#"name : test
+---
+Result = match read(status) {
+    iequals_any('success', 'ok', 'done') => chars(ok),
+    _ => chars(other),
+};
+"#;
+        let model11 = oml_parse_raw(&mut conf11).expect("Failed to parse iequals_any");
+        let cache11 = &mut FieldQueryCache::default();
+        let data11 = vec![FieldStorage::from_owned(DataField::from_chars(
+            "status", "DONE",
+        ))];
+        let src11 = DataRecord::from(data11);
+        let target11 = model11.transform(src11, cache11);
+        let expect11 = DataField::from_chars("Result".to_string(), "ok".to_string());
+        assert_eq!(
+            target11.field("Result").map(|s| s.as_field()),
+            Some(&expect11)
         );
     }
 

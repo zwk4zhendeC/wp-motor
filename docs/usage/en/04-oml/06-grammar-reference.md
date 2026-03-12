@@ -322,7 +322,7 @@ match_fun        = "starts_with",  "(", string, ")"   (* prefix matching *)
 **Notes**:
 - **Multi-source matching**: `match (src1, src2, ...)` supports any number of source fields (>=2), not limited to two
 - **OR syntax**: Use `|` to separate multiple alternative conditions at a condition position; any match succeeds
-- **Function matching**: 10 built-in match functions for flexible string and numeric comparisons
+- **Function matching**: 11 built-in match functions for flexible string and numeric comparisons
 
 **Examples**:
 ```oml
@@ -384,7 +384,34 @@ status = match read(result) {
     iequals('error') => chars(fail) ;
     _ => chars(other) ;
 } ;
+
+# Case-insensitive multi-value matching
+status_class = match read(status) {
+    iequals_any('success', 'ok', 'done') => chars(good) ;
+    iequals_any('error', 'failed', 'timeout') => chars(bad) ;
+    _ => chars(other) ;
+} ;
 ```
+
+### `lookup_nocase`
+
+`lookup_nocase(dict_symbol, key_expr, default_expr)` performs a case-insensitive lookup against a static object dictionary.
+
+```oml
+static {
+    status_score = object {
+        error = float(90.0);
+        warning = float(70.0);
+        success = float(20.0);
+    };
+}
+
+risk_score : float = lookup_nocase(status_score, read(status), 40.0) ;
+```
+
+- `dict_symbol` must reference an object defined in `static`
+- `key_expr` is normalized with `trim + lowercase` before lookup
+- If the key misses or is not a string, `default_expr` is returned
 
 ---
 

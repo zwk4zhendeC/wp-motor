@@ -1,10 +1,12 @@
 pub mod fmt;
+pub mod lookup;
 pub mod map;
 pub mod matchs;
 pub mod pipe;
 pub mod record;
 pub mod sql;
 pub use fmt::*;
+pub use lookup::*;
 pub use map::*;
 pub use matchs::*;
 pub use pipe::*;

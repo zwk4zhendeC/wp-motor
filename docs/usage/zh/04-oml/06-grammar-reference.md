@@ -322,7 +322,7 @@ match_fun        = "starts_with",  "(", string, ")"   (* 前缀匹配 *)
 **说明**：
 - **多源匹配**：`match (src1, src2, ...)` 支持任意数量的源字段（≥2），不再限于双源
 - **OR 语法**：在条件位置使用 `|` 分隔多个备选条件，任一匹配即成功
-- **函数匹配**：支持 10 种内置匹配函数，用于字符串、数值的灵活判断
+- **函数匹配**：支持 11 种内置匹配函数，用于字符串、数值的灵活判断
 
 **示例**：
 ```oml
@@ -384,7 +384,34 @@ status = match read(result) {
     iequals('error') => chars(fail) ;
     _ => chars(other) ;
 } ;
+
+# 忽略大小写多值匹配
+status_class = match read(status) {
+    iequals_any('success', 'ok', 'done') => chars(good) ;
+    iequals_any('error', 'failed', 'timeout') => chars(bad) ;
+    _ => chars(other) ;
+} ;
 ```
+
+### `lookup_nocase`
+
+`lookup_nocase(dict_symbol, key_expr, default_expr)` 用于基于静态 object 做忽略大小写查表。
+
+```oml
+static {
+    status_score = object {
+        error = float(90.0);
+        warning = float(70.0);
+        success = float(20.0);
+    };
+}
+
+risk_score : float = lookup_nocase(status_score, read(status), 40.0) ;
+```
+
+- `dict_symbol` 必须引用 `static` 中定义的 object
+- `key_expr` 会按 `trim + lowercase` 归一化后查表
+- 未命中或 key 不是字符串时，返回 `default_expr`
 
 ---
 

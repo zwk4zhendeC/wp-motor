@@ -13,7 +13,7 @@ use winnow::error::{ContextError, ErrMode, StrContext, StrContextValue};
 use winnow::stream::Stream;
 use wp_data_model::cache::FieldQueryCache;
 use wp_error::{OMLCodeError, OMLCodeResult};
-use wp_model_core::model::{DataField, DataRecord};
+use wp_model_core::model::{DataField, DataRecord, Value};
 use wp_parser::Parser;
 use wp_parser::WResult;
 use wp_parser::atom::{take_obj_path, take_var_name};
@@ -255,6 +255,7 @@ fn rewrite_precise_evaluator(
             Ok(())
         }
         PreciseEvaluator::Match(op) => rewrite_match_operation(op, const_fields),
+        PreciseEvaluator::Lookup(op) => rewrite_lookup_operation(op, const_fields),
         PreciseEvaluator::Pipe(pipe) => rewrite_pipe_operation(pipe, const_fields),
         PreciseEvaluator::Fun(fun) => rewrite_fun_operation(fun, const_fields),
         PreciseEvaluator::Map(map) => rewrite_map_operation(map, const_fields),
@@ -262,6 +263,38 @@ fn rewrite_precise_evaluator(
         PreciseEvaluator::Collect(arr) => rewrite_arr_operation(arr, const_fields),
         _ => Ok(()),
     }
+}
+
+fn rewrite_lookup_operation(
+    op: &mut crate::language::LookupOperation,
+    const_fields: &HashMap<String, Arc<DataField>>,
+) -> Result<(), ErrMode<ContextError>> {
+    rewrite_precise_evaluator(op.key_mut(), const_fields)?;
+    rewrite_precise_evaluator(op.default_mut(), const_fields)?;
+
+    let dict_field = const_fields.get(op.dict_symbol()).ok_or_else(|| {
+        let mut err = ContextError::new();
+        err.push(StrContext::Label("lookup_nocase"));
+        err.push(StrContext::Label("static symbol not found"));
+        ErrMode::Cut(err)
+    })?;
+
+    let Value::Obj(obj) = dict_field.get_value() else {
+        let mut err = ContextError::new();
+        err.push(StrContext::Label("lookup_nocase"));
+        err.push(StrContext::Label("static symbol must be object"));
+        return Err(ErrMode::Cut(err));
+    };
+
+    let mut dict = crate::language::LookupDict::new();
+    for (key, value) in obj.iter() {
+        dict.insert(
+            key.as_str().trim().to_lowercase(),
+            Arc::new(value.as_field().clone()),
+        );
+    }
+    op.bind_compiled(dict);
+    Ok(())
 }
 
 fn rewrite_map_operation(
@@ -734,6 +767,21 @@ target = match read(Content) {
             _ => panic!("expected single evaluator"),
         }
         Ok(())
+    }
+
+    #[test]
+    fn test_lookup_nocase_requires_static_object() {
+        let mut code = r#"
+name : test
+---
+static {
+    score = chars(foo);
+}
+
+risk_score : float = lookup_nocase(score, read(status), 40.0);
+        "#;
+
+        assert!(oml_parse_raw(&mut code).is_err());
     }
     #[test]
     fn test_conf_fmt() -> ModalResult<()> {

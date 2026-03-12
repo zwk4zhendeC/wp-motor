@@ -10,11 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Sinks/Arrow**: Add `arrow-file` sink for local length-prefixed Arrow IPC frame output
 - **wp-proj/init**: Add `arrow_file_sink` and `arrow_tcp_sink` templates to project initialization
+- **OML/Match**: Add `iequals_any(...)` for case-insensitive multi-candidate matching in `match` expressions
+- **OML/Lookup**: Add `lookup_nocase(dict, key, default)` for case-insensitive lookup against static object dictionaries
 
 ### Changed
 - **Connectors/Core**: Move builtin connector sink implementations into the standalone `wp-core-connectors` crate and keep engine-side code as thin re-export wrappers
 - **Connectors/Packaging**: Decouple `wp-core-connectors` from `wp-conf` so it can be consumed as an independent crate
 - **Connectors/Net**: Reuse shared `NetWriter` infrastructure for Arrow-over-TCP output
+- **Documentation/OML**: Update Chinese and English OML function and grammar references for `iequals_any` and `lookup_nocase`
 
 ### Fixed
 - **Sinks/Runtime**: Fix `wp-core-connectors` sink runtime semantics around disconnect handling, raw input validation, output path resolution, and duplicate factory registration

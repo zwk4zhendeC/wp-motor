@@ -188,6 +188,29 @@ NormalizedStatus = match read(status) {
 };
 ```
 
+#### iequals_any(value1, value2, ...)
+
+Performs case-insensitive comparison against multiple candidates and matches if any candidate matches.
+
+**Syntax**: `iequals_any('success', 'ok', 'done')`
+
+**Parameters**:
+- `value1, value2, ...`: one or more string candidates (must be quoted)
+
+**Matching Rules**:
+- Field value equals any candidate ignoring case -> match succeeds
+- No candidate matches -> match fails
+- Field is not a string type -> match fails
+
+**Example**:
+```oml
+StatusClass = match read(status) {
+    iequals_any('success', 'ok', 'done') => chars(good),
+    iequals_any('error', 'failed', 'timeout') => chars(bad),
+    _ => chars(other),
+};
+```
+
 ### Numeric Comparison Functions
 
 #### gt(value)
@@ -420,6 +443,9 @@ Status = match read(user_input) {
   - Added OR condition syntax: `cond1 | cond2 | ...`, express alternative conditions within a single branch
   - Multi-source match supports any number of source fields (no longer limited to 2/3/4)
   - Multi-source match condition positions support OR syntax
+
+- **1.19.1** (2026-03-12)
+  - Added `iequals_any(...)` for case-insensitive multi-candidate matching
 
 - **1.13.4** (2026-02-04)
   - Added match expression function matching support

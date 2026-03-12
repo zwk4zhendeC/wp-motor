@@ -188,6 +188,29 @@ NormalizedStatus = match read(status) {
 };
 ```
 
+#### iequals_any(value1, value2, ...)
+
+忽略大小写比较多个候选值，任一命中即匹配成功。
+
+**语法**: `iequals_any('success', 'ok', 'done')`
+
+**参数**:
+- `value1, value2, ...`: 一个或多个字符串候选值（必须使用引号）
+
+**匹配规则**:
+- 字段值与任一参数值在忽略大小写的情况下相等 → 匹配成功
+- 所有参数都不匹配 → 匹配失败
+- 字段不是字符串类型 → 匹配失败
+
+**示例**:
+```oml
+StatusClass = match read(status) {
+    iequals_any('success', 'ok', 'done') => chars(good),
+    iequals_any('error', 'failed', 'timeout') => chars(bad),
+    _ => chars(other),
+};
+```
+
 ### 数值比较函数
 
 #### gt(value)
@@ -665,6 +688,9 @@ EventType = match read(log_line) {
   - 新增 OR 条件语法：`cond1 | cond2 | ...`，在同一分支中表达备选条件
   - 多源 match 支持任意数量源字段（不再限于 2/3/4 个）
   - 多源 match 条件位置支持 OR 语法
+
+- **1.19.1** (2026-03-12)
+  - 新增 `iequals_any(...)`，用于忽略大小写的多候选值匹配
 
 - **1.13.4** (2026-02-04)
   - 新增 match 表达式函数匹配支持

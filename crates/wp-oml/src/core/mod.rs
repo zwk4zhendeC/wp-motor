@@ -65,6 +65,7 @@ impl FieldExtractor for PreciseEvaluator {
         match self {
             PreciseEvaluator::Sql(o) => o.extract_one(target, src, dst),
             PreciseEvaluator::Match(o) => o.extract_one(target, src, dst),
+            PreciseEvaluator::Lookup(o) => o.extract_one(target, src, dst),
             PreciseEvaluator::Obj(o) => o.extract_one(target, src, dst),
             PreciseEvaluator::Tdc(o) => o.extract_one(target, src, dst),
             PreciseEvaluator::Map(o) => o.extract_one(target, src, dst),
@@ -90,6 +91,7 @@ impl FieldExtractor for PreciseEvaluator {
             // Static symbol reference: return Shared variant (zero-copy)
             // Skip extract_one to avoid unnecessary clone
             PreciseEvaluator::ObjArc(arc) => Some(FieldStorage::from_shared(arc.clone())),
+            PreciseEvaluator::Lookup(o) => o.extract_storage(target, src, dst),
 
             // Regular fields: delegate to default implementation (calls extract_one and wraps in Owned)
             _ => self
@@ -107,6 +109,7 @@ impl FieldExtractor for PreciseEvaluator {
         match self {
             PreciseEvaluator::Sql(o) => o.extract_more(src, dst, cache),
             PreciseEvaluator::Match(o) => o.extract_more(src, dst, cache),
+            PreciseEvaluator::Lookup(o) => o.extract_more(src, dst, cache),
             PreciseEvaluator::Obj(o) => o.extract_more(src, dst, cache),
             PreciseEvaluator::ObjArc(o) => o.as_ref().extract_more(src, dst, cache),
             PreciseEvaluator::Tdc(o) => o.extract_more(src, dst, cache),
@@ -126,6 +129,7 @@ impl FieldExtractor for PreciseEvaluator {
         match self {
             PreciseEvaluator::Sql(o) => o.support_batch(),
             PreciseEvaluator::Match(o) => o.support_batch(),
+            PreciseEvaluator::Lookup(o) => o.support_batch(),
             PreciseEvaluator::Obj(o) => o.support_batch(),
             PreciseEvaluator::ObjArc(o) => o.as_ref().support_batch(),
             PreciseEvaluator::Tdc(o) => o.support_batch(),

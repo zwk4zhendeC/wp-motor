@@ -399,6 +399,19 @@ fn match_with_function(value: &DataField, fun: &MatchFun) -> bool {
                 false
             }
         }
+        "iequals_any" => {
+            if fun.args.is_empty() {
+                warn_data!("iequals_any function requires at least one argument");
+                false
+            } else if let Value::Chars(s) = value.get_value() {
+                let normalized = s.to_lowercase();
+                fun.args
+                    .iter()
+                    .any(|candidate| normalized == candidate.to_lowercase())
+            } else {
+                false
+            }
+        }
         // Numeric comparison functions
         "gt" => {
             if let Some(threshold) = fun.arg() {

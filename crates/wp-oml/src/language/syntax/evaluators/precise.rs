@@ -2,6 +2,7 @@ use crate::language::prelude::*;
 use crate::language::syntax::accessors::nested::arr::ArrOperation;
 use crate::language::syntax::functions::FunOperation;
 use crate::language::syntax::operations::fmt::FmtOperation;
+use crate::language::syntax::operations::lookup::LookupOperation;
 use crate::language::syntax::operations::map::MapOperation;
 use crate::language::syntax::operations::matchs::MatchOperation;
 use crate::language::syntax::operations::pipe::PiPeOperation;
@@ -44,6 +45,7 @@ pub enum PreciseEvaluator {
     //Query(LookupQuery),
     Sql(SqlQuery),
     Match(MatchOperation),
+    Lookup(LookupOperation),
     Obj(DataField),
     /// Arc-wrapped DataField for zero-copy sharing (from static symbols)
     ObjArc(Arc<DataField>),
@@ -68,6 +70,7 @@ impl Display for PreciseEvaluator {
         match self {
             //PreciseEvaluator::Query(x) => Display::fmt(x, f),
             PreciseEvaluator::Match(x) => Display::fmt(x, f),
+            PreciseEvaluator::Lookup(x) => Display::fmt(x, f),
             PreciseEvaluator::Sql(x) => Display::fmt(x, f),
             PreciseEvaluator::Obj(x) => Display::fmt(x, f),
             PreciseEvaluator::ObjArc(x) => Display::fmt(x.as_ref(), f),

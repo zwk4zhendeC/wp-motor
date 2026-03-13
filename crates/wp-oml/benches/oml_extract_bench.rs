@@ -5,7 +5,7 @@ use oml::parser::oml_parse_raw;
 use std::hint::black_box;
 use wp_data_model::cache::FieldQueryCache;
 use wp_model_core::model::{DataField, DataRecord};
-use wp_parser::Parser;
+use wp_primitives::Parser;
 
 fn build_model(code: &str) -> ObjModel {
     let conf = code.to_string();

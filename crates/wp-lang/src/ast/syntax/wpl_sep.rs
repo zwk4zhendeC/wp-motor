@@ -8,9 +8,9 @@ use std::marker::PhantomData;
 use winnow::combinator::{alt, opt, separated};
 use winnow::stream::Range;
 use winnow::token::{literal, take_until, take_while};
-use wp_parser::Parser;
-use wp_parser::WResult;
-use wp_parser::symbol::ctx_desc;
+use wp_primitives::Parser;
+use wp_primitives::WResult;
+use wp_primitives::symbol::ctx_desc;
 
 const DEFAULT_SEP: &str = " ";
 pub trait DefaultSep {

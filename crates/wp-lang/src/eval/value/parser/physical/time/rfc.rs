@@ -13,8 +13,8 @@ use winnow::stream::Stream as _;
 use winnow::token::literal;
 use wp_model_core::model::FNameStr;
 use wp_model_core::model::{DataField, DateTimeValue};
-use wp_parser::WResult;
-use wp_parser::symbol::ctx_desc;
+use wp_primitives::WResult;
+use wp_primitives::symbol::ctx_desc;
 
 pub fn parse_rfc3339(data: &mut &str) -> WResult<DateTimeValue> {
     let items = &[chrono::format::Item::Fixed(Fixed::RFC3339)];
@@ -54,7 +54,7 @@ fn parse_timep(data: &mut &str) -> WResult<DateTimeValue> {
     } else {
         let cp = (*data).checkpoint();
         Err(winnow::error::ErrMode::Backtrack(
-            wp_parser::utils::context_error(data, &cp, "time parse fail"),
+            wp_primitives::utils::context_error(data, &cp, "time parse fail"),
         ))
     }
 }

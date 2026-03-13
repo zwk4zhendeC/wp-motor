@@ -24,7 +24,7 @@ wp-log = { workspace = true }
 wp-specs = { workspace = true }
 # wp-lang needs orion-error 0.6 APIs for wp-parse-api 0.8 reason constructors.
 orion-error = { workspace = true }
-wp_parser = { package = "wp-parser", path = "../wp-parser", default-features = false }
+wp_primitives = { package = "wp-primitives", path = "../wp-primitives" }
 derive-getters = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

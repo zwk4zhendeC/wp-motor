@@ -4,9 +4,9 @@ use crate::generator::GenChannel;
 use crate::types::AnyResult;
 use wp_model_core::model::DataField;
 use wp_model_core::model::FNameStr;
-use wp_parser::Parser;
-use wp_parser::WResult as ModalResult;
-use wp_parser::symbol::ctx_desc;
+use wp_primitives::Parser;
+use wp_primitives::WResult as ModalResult;
+use wp_primitives::symbol::ctx_desc;
 
 use crate::eval::runtime::field::FieldEvalUnit;
 use crate::eval::value::parse_def::*;

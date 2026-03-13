@@ -1,13 +1,13 @@
 use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime};
 use winnow::Parser as _;
 use winnow::combinator::fail;
-use wp_parser::symbol::ctx_desc;
+use wp_primitives::symbol::ctx_desc;
 
 // Shared helper to parse a fixed chrono::format::Item sequence and advance input
 pub fn parse_fixed<'a>(
     data: &mut &'a str,
     fixed: &'a [chrono::format::Item<'a>],
-) -> wp_parser::WResult<DateTime<FixedOffset>> {
+) -> wp_primitives::WResult<DateTime<FixedOffset>> {
     use chrono::format::{Parsed, parse_and_remainder};
     let mut parsed: Parsed = Parsed::new();
     let remain = match parse_and_remainder(&mut parsed, data, fixed.iter()) {

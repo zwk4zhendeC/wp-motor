@@ -1,6 +1,6 @@
 //! String parsing helpers for WPL: quoted string, raw string, simple quoted and escapes.
 
-use wp_parser::WResult;
+use wp_primitives::WResult;
 
 use crate::parser::utils::{self, quot_r_str, window_path};
 

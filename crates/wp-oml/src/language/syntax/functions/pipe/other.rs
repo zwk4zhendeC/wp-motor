@@ -2,7 +2,7 @@ use crate::core::ValueProcessor;
 use crate::language::prelude::*;
 use strum_macros::EnumString;
 
-use wp_parser::fun::fun_trait::Fun1Builder;
+use wp_primitives::fun::fun_trait::Fun1Builder;
 
 pub const PIPE_TO_STR: &str = "to_str";
 #[derive(Default, Builder, Debug, Clone, Getters, Serialize, Deserialize)]

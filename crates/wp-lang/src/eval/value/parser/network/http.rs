@@ -11,7 +11,7 @@ use winnow::combinator::terminated;
 use winnow::error::ErrMode;
 use winnow::token::{take_until, take_while};
 use wp_model_core::model::Value;
-use wp_parser::utils::context_error;
+use wp_primitives::utils::context_error;
 
 derive_base_prs!(RequestP);
 

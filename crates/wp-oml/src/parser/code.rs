@@ -1,7 +1,7 @@
 use derive_getters::Getters;
 
 use wp_error::parse_error::{OMLCodeError, OMLCodeReason, OMLCodeResult, OmlCodeResult};
-use wp_parser::comment::CommentParser;
+use wp_primitives::comment::CommentParser;
 
 use crate::{
     core::ConfADMExt,

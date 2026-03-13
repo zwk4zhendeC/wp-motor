@@ -10,7 +10,7 @@ use crate::types::AnyResult;
 use winnow::ascii::multispace0;
 use winnow::{ModalResult, Parser};
 use wp_model_core::model::DataField;
-use wp_parser::symbol::ctx_desc;
+use wp_primitives::symbol::ctx_desc;
 
 #[derive(Default)]
 pub struct SymbolP {}

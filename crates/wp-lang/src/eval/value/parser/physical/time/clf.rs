@@ -19,7 +19,7 @@ impl PatternParser for TimeCLF {
         data: &mut &str,
         name: FNameStr,
         out: &mut Vec<DataField>,
-    ) -> wp_parser::WResult<()> {
+    ) -> wp_primitives::WResult<()> {
         // Avoid explicit deref; pass through and let auto-deref handle coercions
         if let Some((consumed, ndt)) = fast_apache_dt(data) {
             *data = &data[consumed..];
@@ -28,7 +28,7 @@ impl PatternParser for TimeCLF {
         }
         let cp = (*data).checkpoint();
         Err(winnow::error::ErrMode::Backtrack(
-            wp_parser::utils::context_error(data, &cp, "<time/clf> parse failed"),
+            wp_primitives::utils::context_error(data, &cp, "<time/clf> parse failed"),
         ))
     }
     fn patten_gen(

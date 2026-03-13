@@ -6,9 +6,9 @@ use crate::parser::wpl_field::wpl_end_sep_str;
 use crate::parser::wpl_rule;
 use winnow::ascii::{digit1, multispace0};
 use winnow::combinator::{alt, delimited, opt};
-use wp_parser::Parser;
-use wp_parser::WResult;
-use wp_parser::symbol::{ctx_desc, ctx_literal};
+use wp_primitives::Parser;
+use wp_primitives::WResult;
+use wp_primitives::symbol::{ctx_desc, ctx_literal};
 
 pub fn wpl_group(input: &mut &str) -> WResult<WplGroup> {
     let mut group = WplGroup::default();

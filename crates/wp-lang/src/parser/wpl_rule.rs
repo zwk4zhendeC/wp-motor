@@ -7,8 +7,8 @@ use winnow::ascii::multispace0;
 use winnow::combinator::{alt, opt, repeat};
 use winnow::error::StrContext;
 use winnow::token::literal;
-use wp_parser::Parser;
-use wp_parser::symbol::{ctx_desc, ctx_label, ctx_literal};
+use wp_primitives::Parser;
+use wp_primitives::symbol::{ctx_desc, ctx_label, ctx_literal};
 
 /// 预处理规则
 /// | base64 |
@@ -16,7 +16,7 @@ use wp_parser::symbol::{ctx_desc, ctx_label, ctx_literal};
 /// | base64|
 /// |base64|quote|
 /// | hex |
-fn take_plg_pipe_step(input: &mut &str) -> wp_parser::WResult<SmolStr> {
+fn take_plg_pipe_step(input: &mut &str) -> wp_primitives::WResult<SmolStr> {
     (
         literal("plg_pipe"),
         multispace0,
@@ -37,7 +37,7 @@ fn take_plg_pipe_step(input: &mut &str) -> wp_parser::WResult<SmolStr> {
         .parse_next(input)
 }
 
-pub fn pip_proc(input: &mut &str) -> wp_parser::WResult<Vec<SmolStr>> {
+pub fn pip_proc(input: &mut &str) -> wp_primitives::WResult<Vec<SmolStr>> {
     let x: Vec<_> = repeat(
         1..,
         (
@@ -62,7 +62,7 @@ pub fn pip_proc(input: &mut &str) -> wp_parser::WResult<Vec<SmolStr>> {
     Ok(x)
 }
 
-pub fn wpl_rule(input: &mut &str) -> wp_parser::WResult<WplRule> {
+pub fn wpl_rule(input: &mut &str) -> wp_primitives::WResult<WplRule> {
     let atags = opt(ann_fun).parse_next(input)?;
     (multispace0, "rule", multispace0)
         .context(ctx_label("wpl keyword"))
@@ -87,7 +87,7 @@ pub fn wpl_rule(input: &mut &str) -> wp_parser::WResult<WplRule> {
     Ok(rule.add_tags(atags))
 }
 
-pub(crate) fn wpl_field_vec(input: &mut &str) -> wp_parser::WResult<Vec<WplField>> {
+pub(crate) fn wpl_field_vec(input: &mut &str) -> wp_primitives::WResult<Vec<WplField>> {
     let mut field_vec = Vec::new();
     multispace0.parse_next(input)?;
     while utils::peek_next((multispace0, ")"), input).is_err() && !input.is_empty() {

@@ -4,9 +4,9 @@ use std::collections::HashSet;
 use winnow::ascii::multispace0;
 use winnow::error::{ContextError, ErrMode};
 use winnow::stream::Stream;
-use wp_parser::Parser;
-use wp_parser::WResult;
-use wp_parser::atom::take_var_name;
+use wp_primitives::Parser;
+use wp_primitives::WResult;
+use wp_primitives::atom::take_var_name;
 
 use crate::language::PreciseEvaluator;
 

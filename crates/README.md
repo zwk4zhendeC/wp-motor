@@ -2,7 +2,7 @@
 
 本目录存放工作区共享的 Rust 库（crates）。命名采用 kebab-case，并以 `wp-` 作为前缀统一领域归属；第三方/上游组件保留其原名。二进制应用位于 `apps/`，通常通过在 Cargo.toml 中添加 `package = "…"` 的方式引用这些库（保持现有 crate id 不变）。
 
-- 依赖约定：语言/解析相关在 `wp-lang`、`wp-expr`、`wp-parser`、`wp-oml`；数据/类型在 `wp-data-utils`；错误在 `wp-error`；日志在 `wp-log`（基于 log/log4rs 封装）；配置在 `wp-config`；控制面在 `wp-ctrl-api`；I/O 接口在 `wp-source-api`、`wp-sink-api`；统计在 `wp-stats`；CLI 共用工具在 `wp-cli-utils`；通用设施在 `wp-common`。
+- 依赖约定：语言/解析相关在 `wp-lang`、`wp-primitives`、`wp-condition`、`wp-oml`；数据/类型在 `wp-data-utils`；错误在 `wp-error`；日志在 `wp-log`（基于 log/log4rs 封装）；配置在 `wp-config`；控制面在 `wp-ctrl-api`；I/O 接口在 `wp-source-api`、`wp-sink-api`；统计在 `wp-stats`；CLI 共用工具在 `wp-cli-utils`；通用设施在 `wp-common`。
 - Feature 约定：Kafka 聚合开关使用 `kafka`；插件/商业能力在根工程聚合（见根 Cargo.toml 的 `features`）。
 
 ## 各 crate 简述
@@ -19,7 +19,7 @@
 
 - `wp-config`
   - 运行配置与模型构建：数据源/数据汇声明、业务分组、期望/路由、表结构、命令行参数桥接等。
-  - 连接语言/解析与数据模型：依赖 `wp-lang`、`wp-parser`、`wp-oml`、`wp-data-utils`、`wp-knowledge` 等。
+  - 连接语言/解析与数据模型：依赖 `wp-lang`、`wp-primitives`、`wp-condition`、`wp-oml`、`wp-data-utils`、`wp-knowledge` 等。
 
 - `wp-ctrl-api`
   - 控制面接口：`EnginePaths`、`RuleSyncOps`、`ControlBus`、隐私服务启动等抽象与对接点。
@@ -32,7 +32,7 @@
 
 - `wp-expr`
   - 逻辑与比较表达式内核：表达式 AST、构建器、求值器；SQL/Rust 风格符号提供者。
-  - 为语言/解析层（`wp-lang`、`wp-parser`）提供布尔表达式基础。
+  - 为语言/解析层（`wp-condition` 等）提供布尔表达式基础。
 
 - `wp-knowledge`
   - 知识库/词典：内存/SQLite（`rusqlite` + `r2d2`），统一查询接口与序列化支持。
@@ -46,8 +46,12 @@
 - `wp-oml`
   - OML 语言与隐私处理：语法/解析/执行与隐私处理流水线（脱敏/掩码/规则），与 `wp-lang`、`wp-data-utils` 融合。
 
-- `wp-parser`
-  - 轻量通用解析构件：原子/符号/SQL 符号、函数调用参数、条件表达式、网络/IP 等；桥接到 `wp-expr`。
+- `wp-primitives`
+  - 轻量通用解析构件：原子/符号、函数调用参数、网络/IP、scope、comment 等基础解析设施。
+
+- `wp-condition`
+  - 条件表达式解析：比较/逻辑表达式与 SQL 风格比较符解析；桥接到 `orion_exp`。
+
 
 - `wp-sink-api`
   - Sink 接口与注册表：`AsyncCtrl`、`AsyncRecordSink`、`AsyncRawDataSink`、`AsyncSink` 组合与 `SinkBuilder`/`SinkRegistry`。

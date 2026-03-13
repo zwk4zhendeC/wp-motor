@@ -1,0 +1,14 @@
+[package]
+name = "wp-condition"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[lib]
+name = "wp_condition"
+path = "src/lib.rs"
+
+[dependencies]
+orion_exp = { path = "../orion_exp" }
+wp_primitives = { package = "wp-primitives", path = "../wp-primitives" }
+winnow = { workspace = true }

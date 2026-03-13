@@ -4,14 +4,14 @@ use crate::parser::oml_aggregate;
 use winnow::ascii::multispace0;
 use winnow::combinator::{alt, opt};
 use wp_model_core::model::DataField;
-use wp_parser::Parser;
-use wp_parser::WResult;
+use wp_primitives::Parser;
+use wp_primitives::WResult;
 use wpl::parser::datatype::{field_ins, take_datatype};
 
 use crate::language::{DCT_GET, DCT_OPTION, GenericBinding, OML_CRATE_IN};
-use wp_parser::atom::{take_json_path, take_key_pair, take_parentheses_val};
-use wp_parser::symbol::{symbol_colon, symbol_comma, symbol_under_line};
-use wp_parser::utils::get_scope;
+use wp_primitives::atom::{take_json_path, take_key_pair, take_parentheses_val};
+use wp_primitives::symbol::{symbol_colon, symbol_comma, symbol_under_line};
+use wp_primitives::utils::get_scope;
 
 pub fn oml_default(data: &mut &str) -> WResult<GenericBinding> {
     (symbol_under_line, symbol_colon).parse_next(data)?;

@@ -11,8 +11,8 @@ use base64::engine::general_purpose;
 use regex::Regex;
 use winnow::combinator::fail;
 use wp_model_core::model::{DataField, Value};
-use wp_parser::symbol::ctx_desc;
-use wp_parser::{Parser, WResult};
+use wp_primitives::symbol::ctx_desc;
+use wp_primitives::{Parser, WResult};
 
 impl FieldSelector for TakeField {
     fn select(

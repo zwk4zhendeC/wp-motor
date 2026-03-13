@@ -6,9 +6,9 @@ use winnow::ascii::{multispace0, multispace1};
 use winnow::combinator::{alt, cut_err, delimited, opt, repeat};
 use winnow::error::{ContextError, StrContext};
 use winnow::token::literal;
-use wp_parser::Parser;
-use wp_parser::WResult;
-use wp_parser::symbol::{ctx_desc, ctx_label, ctx_literal};
+use wp_primitives::Parser;
+use wp_primitives::WResult;
+use wp_primitives::symbol::{ctx_desc, ctx_label, ctx_literal};
 
 pub fn wpl_pkg_body2(input: &mut &str) -> WResult<Vec<WplRule>> {
     let mut rules = Vec::new();

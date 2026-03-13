@@ -1,11 +1,11 @@
 use orion_exp::{CmpOperator, Comparison, RustSymbol};
 use winnow::combinator::fail;
+use wp_condition::cond::{CmpParser, ConditionParser, SymbolFrom};
 use wp_model_core::model::{DataField, DataType};
-use wp_parser::Parser;
-use wp_parser::WResult;
-use wp_parser::atom::take_var_name;
-use wp_parser::cond::{CmpParser, ConditionParser, SymbolFrom};
-use wp_parser::symbol::{ctx_desc, symbol_cmp, symbol_dollar};
+use wp_primitives::Parser;
+use wp_primitives::WResult;
+use wp_primitives::atom::take_var_name;
+use wp_primitives::symbol::{ctx_desc, symbol_cmp, symbol_dollar};
 use wpl::parser::datatype;
 
 pub struct FieldDataOperator {}
@@ -73,15 +73,15 @@ pub type WarpConditionParser = ConditionParser<DataField, FieldDataOperator, Rus
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
 
-    use wp_parser::WResult as ModalResult;
-    use wp_parser::{Parser, WResult};
+    use wp_primitives::WResult as ModalResult;
+    use wp_primitives::{Parser, WResult};
 
     use wp_model_core::model::DataField;
 
     use crate::cond::parse::{FieldDataOperator, WarpConditionParser};
     use orion_exp::{CmpOperator, ExpressionBuilder, LogicalBuilder, LogicalTrait, RustSymbol};
     use orion_exp::{Comparison, Expression};
-    use wp_parser::cond::CmpParser;
+    use wp_condition::cond::CmpParser;
     use wpl::parser::datatype;
 
     #[test]

@@ -126,7 +126,7 @@ mod tests {
     use crate::ast::debug::{DebugFormat, DepIndent};
     use crate::parser::wpl_pkg::wpl_package;
     use orion_error::TestAssert;
-    use wp_parser::Parser;
+    use wp_primitives::Parser;
 
     #[test]
     fn test_debug_format() {

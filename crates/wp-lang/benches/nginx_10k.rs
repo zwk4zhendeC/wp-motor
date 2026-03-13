@@ -3,7 +3,7 @@ use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_m
 use orion_error::TestAssert;
 use std::hint::black_box;
 use wp_model_core::raw::RawData;
-use wp_parser::Parser;
+use wp_primitives::Parser;
 use wpl::{WplEvaluator, wpl_express};
 
 // 构造 10k 行 nginx 样本（复用仓库自带样例）

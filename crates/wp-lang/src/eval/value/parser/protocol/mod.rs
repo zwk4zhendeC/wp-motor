@@ -4,8 +4,8 @@ use crate::parser::utils::{quot_r_str, quot_str, window_path};
 use winnow::ascii::multispace0;
 use winnow::combinator::alt;
 use wp_model_core::model::DataField;
-use wp_parser::Parser;
-use wp_parser::WResult as ModalResult;
+use wp_primitives::Parser;
+use wp_primitives::WResult as ModalResult;
 
 pub mod array;
 pub mod base64;

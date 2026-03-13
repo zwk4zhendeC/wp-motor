@@ -8,7 +8,7 @@ use crate::eval::runtime::field::FieldEvalUnit;
 use crate::eval::value::parse_def::PatternParser;
 use crate::eval::value::parser::protocol::take_sub_tdo;
 use crate::parser::utils::take_key;
-use wp_parser::scope::ScopeEval;
+use wp_primitives::scope::ScopeEval;
 
 derive_base_prs!(ProtoTextP);
 
@@ -127,7 +127,7 @@ mod tests {
     use crate::types::AnyResult;
     use orion_error::TestAssert;
     use wp_model_core::model::{DataRecord, DataType};
-    use wp_parser::Parser;
+    use wp_primitives::Parser;
 
     #[test]
     fn test_parse_proto_text_1() {

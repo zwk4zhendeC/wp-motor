@@ -52,7 +52,7 @@ mod tests {
     use smol_str::SmolStr;
     use wp_data_fmt::{DataFormat, KeyValue, Raw};
     use wp_model_core::model::types::value::ObjectValue;
-    use wp_parser::Parser;
+    use wp_primitives::Parser;
 
     use super::*;
     use crate::eval::value::parser::protocol::json::JsonP;

@@ -3,7 +3,7 @@ use crate::ast::group::GroupOpt;
 use crate::eval::runtime::group::{LogicProc, WplEvalGroup};
 use winnow::stream::Stream;
 use wp_model_core::model::DataField;
-use wp_parser::WResult as ModalResult;
+use wp_primitives::WResult as ModalResult;
 
 impl LogicProc for GroupOpt {
     fn process(
@@ -34,7 +34,7 @@ mod tests {
     use orion_error::TestAssert;
     use std::net::{IpAddr, Ipv4Addr};
     use wp_model_core::model::DataField;
-    use wp_parser::Parser;
+    use wp_primitives::Parser;
     #[test]
     fn test_opt_group_1() -> AnyResult<()> {
         let express = wpl_express.parse(r#"opt(ip:sip),(2*_,time<[,]>)"#).assert();

@@ -17,8 +17,8 @@ use orion_error::{ErrorWith, ToStructError, UvsFrom};
 use orion_overload::new::New3;
 use wp_log::debug_edata;
 use wp_model_core::model::DataRecord;
-use wp_parser::Parser;
-use wp_parser::WResult as ModalResult;
+use wp_primitives::Parser;
+use wp_primitives::WResult as ModalResult;
 
 // Internal DataResult for wp-lang usage
 // Plugin developers should use wp_parse_api::DataResult instead

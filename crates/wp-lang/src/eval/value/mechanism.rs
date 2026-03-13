@@ -12,9 +12,9 @@ use wp_model_core::model::{DataField, DataType};
 use winnow::ascii::multispace0;
 use winnow::combinator::fail;
 use winnow::stream::Stream;
-use wp_parser::WResult as ModalResult;
-use wp_parser::symbol::ctx_desc;
-use wp_parser::utils::RestAble;
+use wp_primitives::WResult as ModalResult;
+use wp_primitives::symbol::ctx_desc;
+use wp_primitives::utils::RestAble;
 
 impl<T> FieldParser for T
 where

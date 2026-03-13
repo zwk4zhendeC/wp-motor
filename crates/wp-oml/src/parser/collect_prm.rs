@@ -3,8 +3,8 @@ use crate::language::PreciseEvaluator;
 use crate::parser::keyword::kw_gw_collect;
 use crate::parser::oml_aggregate::oml_var_get;
 use winnow::error::{StrContext, StrContextValue};
-use wp_parser::Parser;
-use wp_parser::WResult;
+use wp_primitives::Parser;
+use wp_primitives::WResult;
 
 pub fn oml_aga_collect(data: &mut &str) -> WResult<PreciseEvaluator> {
     Ok(PreciseEvaluator::Collect(
@@ -32,7 +32,7 @@ mod tests {
     use orion_error::TestAssert;
     use wp_data_model::cache::FieldQueryCache;
     use wp_model_core::model::{DataField, DataRecord, FieldStorage};
-    use wp_parser::WResult as ModalResult;
+    use wp_primitives::WResult as ModalResult;
 
     #[test]
     fn test_oml_collect() -> ModalResult<()> {

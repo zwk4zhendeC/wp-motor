@@ -8,7 +8,7 @@ use wp_knowledge::facade as kdb;
 use wp_knowledge::mem::memdb::MemDB;
 
 use wp_model_core::model::{DataField, DataRecord, FieldStorage};
-use wp_parser::Parser;
+use wp_primitives::Parser;
 
 /// 初始化：
 /// - 将知识库门面绑定到全局内存库

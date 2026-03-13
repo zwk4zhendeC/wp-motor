@@ -3,9 +3,9 @@ use winnow::ascii::Caseless;
 use winnow::ascii::multispace0;
 use winnow::error::{StrContext, StrContextValue};
 use winnow::token::literal;
-use wp_parser::Parser;
-use wp_parser::WResult;
-use wp_parser::symbol::ctx_desc;
+use wp_primitives::Parser;
+use wp_primitives::WResult;
+use wp_primitives::symbol::ctx_desc;
 
 pub fn kw_gw_match(data: &mut &str) -> WResult<()> {
     let _ = multispace0.parse_next(data)?;

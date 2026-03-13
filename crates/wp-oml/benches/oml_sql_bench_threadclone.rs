@@ -10,7 +10,7 @@ use wp_config::test_support::ForTest;
 use wp_data_model::cache::FieldQueryCache;
 use wp_knowledge::facade as kdb;
 use wp_model_core::model::{DataField, DataRecord, FieldStorage};
-use wp_parser::Parser;
+use wp_primitives::Parser;
 
 const BENCH_KEYS: [&str; 10] = [
     "linghuchong",

@@ -2,7 +2,7 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use orion_error::TestAssert;
 use std::fmt::Write as FmtWrite;
 use wp_model_core::raw::RawData;
-use wp_parser::Parser;
+use wp_primitives::Parser;
 use wpl::{WplEvaluator, wpl_express};
 
 fn wpl_parse(lpp: &WplEvaluator, data: &RawData) {

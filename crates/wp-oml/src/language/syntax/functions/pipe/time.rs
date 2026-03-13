@@ -1,5 +1,5 @@
 use crate::language::prelude::*;
-use wp_parser::fun::fun_trait::Fun2Builder;
+use wp_primitives::fun::fun_trait::Fun2Builder;
 pub const PIPE_TIME_TO_TS: &str = "Time::to_ts";
 #[derive(Clone, Debug, Default)]
 pub struct TimeToTs {}

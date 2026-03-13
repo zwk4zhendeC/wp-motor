@@ -13,7 +13,7 @@ use derive_getters::Getters;
 use wp_model_core::model::FNameStr;
 // Use centralized parser result alias for consistency across crates
 use wp_model_core::model::{DataField, DataType};
-use wp_parser::WResult as ModalResult;
+use wp_primitives::WResult as ModalResult;
 
 use super::pipe_exec::PipeExecutor;
 use super::subunit::SubUnitManager;

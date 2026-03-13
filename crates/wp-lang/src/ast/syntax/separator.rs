@@ -9,8 +9,8 @@ use winnow::combinator::preceded;
 use winnow::combinator::{opt, trace};
 use winnow::stream::{FindSlice, Stream};
 use winnow::token::{literal, take_while};
-use wp_parser::WResult as ModalResult;
-use wp_parser::Parser;
+use wp_primitives::WResult as ModalResult;
+use wp_primitives::Parser;
 
 #[derive(Debug)]
 pub struct CharSep {

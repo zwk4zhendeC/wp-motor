@@ -6,9 +6,9 @@ use smol_str::SmolStr;
 use winnow::ascii::multispace0;
 use winnow::combinator::{alt, cut_err, delimited, separated};
 use winnow::token::literal;
-use wp_parser::Parser;
-use wp_parser::WResult;
-use wp_parser::symbol::ctx_desc;
+use wp_primitives::Parser;
+use wp_primitives::WResult;
+use wp_primitives::symbol::ctx_desc;
 
 fn wpl_tags(input: &mut &str) -> WResult<AnnEnum> {
     let tags: Vec<(SmolStr, SmolStr)> = delimited(
@@ -69,7 +69,7 @@ mod tests {
     use crate::parser::utils::take_tag_kv;
     use crate::parser::wpl_anno::{ann_fun, wpl_tags};
     use orion_error::TestAssert;
-    use wp_parser::Parser;
+    use wp_primitives::Parser;
 
     #[test]
     fn test_tag_key() {

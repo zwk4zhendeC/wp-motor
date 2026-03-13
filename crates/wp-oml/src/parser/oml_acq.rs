@@ -10,8 +10,8 @@ use winnow::combinator::{alt, opt, trace};
 use winnow::error::{ContextError, ErrMode};
 use winnow::stream::Stream;
 use winnow::{ModalResult, Parser};
-use wp_parser::atom::take_var_name;
-use wp_parser::symbol::symbol_semicolon;
+use wp_primitives::atom::take_var_name;
+use wp_primitives::symbol::symbol_semicolon;
 
 pub fn oml_gens_acq(data: &mut &str) -> ModalResult<GenericAccessor> {
     let gw = alt((
@@ -85,7 +85,7 @@ fn oml_sql_fn(data: &mut &str) -> ModalResult<CondAccessor> {
     let name = take_var_name.parse_next(data)?;
     // must be followed by '('
     let _ = multispace0.parse_next(data)?;
-    if wp_parser::symbol::symbol_bracket_beg
+    if wp_primitives::symbol::symbol_bracket_beg
         .parse_next(data)
         .is_err()
     {
@@ -110,18 +110,18 @@ fn oml_sql_fn(data: &mut &str) -> ModalResult<CondAccessor> {
         }
         multispace0.parse_next(data)?;
         // if next is ',', continue; if ')', break
-        if wp_parser::symbol::symbol_bracket_end
+        if wp_primitives::symbol::symbol_bracket_end
             .parse_peek(data)
             .is_ok()
         {
-            wp_parser::symbol::symbol_bracket_end.parse_next(data)?;
+            wp_primitives::symbol::symbol_bracket_end.parse_next(data)?;
             break;
-        } else if wp_parser::symbol::symbol_comma.parse_peek(data).is_ok() {
-            wp_parser::symbol::symbol_comma.parse_next(data)?;
+        } else if wp_primitives::symbol::symbol_comma.parse_peek(data).is_ok() {
+            wp_primitives::symbol::symbol_comma.parse_next(data)?;
             continue;
         } else {
             // tolerate missing commas if immediately before ')'
-            wp_parser::symbol::symbol_bracket_end.parse_next(data)?;
+            wp_primitives::symbol::symbol_bracket_end.parse_next(data)?;
             break;
         }
     }

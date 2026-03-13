@@ -4,9 +4,9 @@ use crate::parser::keyword::kw_object;
 use crate::parser::oml_aggregate::oml_aggregate_sub;
 use winnow::ascii::multispace0;
 use winnow::combinator::{repeat, trace};
-use wp_parser::Parser;
-use wp_parser::WResult;
-use wp_parser::utils::get_scope;
+use wp_primitives::Parser;
+use wp_primitives::WResult;
+use wp_primitives::utils::get_scope;
 
 pub fn oml_aga_map(data: &mut &str) -> WResult<PreciseEvaluator> {
     let map = trace("gw map", oml_map).parse_next(data)?;
@@ -33,8 +33,8 @@ pub fn oml_map(data: &mut &str) -> WResult<MapOperation> {
 
 #[cfg(test)]
 mod tests {
-    use wp_parser::Parser;
-    use wp_parser::WResult;
+    use wp_primitives::Parser;
+    use wp_primitives::WResult;
 
     use crate::parser::map_prm::oml_map;
     use crate::parser::utils::for_test::assert_oml_parse;

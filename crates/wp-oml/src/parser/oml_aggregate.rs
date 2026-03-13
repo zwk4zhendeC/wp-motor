@@ -31,16 +31,16 @@ use winnow::error::StrContext;
 use winnow::error::StrContextValue;
 use winnow::stream::Stream;
 use wp_model_core::model::DataType;
-use wp_parser::Parser;
-use wp_parser::WResult;
-use wp_parser::atom::{take_var_name, take_wild_key};
-use wp_parser::symbol::ctx_desc;
-use wp_parser::symbol::ctx_label;
-use wp_parser::symbol::ctx_literal;
-use wp_parser::symbol::{
+use wp_primitives::Parser;
+use wp_primitives::WResult;
+use wp_primitives::atom::{take_var_name, take_wild_key};
+use wp_primitives::symbol::ctx_desc;
+use wp_primitives::symbol::ctx_label;
+use wp_primitives::symbol::ctx_literal;
+use wp_primitives::symbol::{
     symbol_assign, symbol_brace_beg, symbol_brace_end, symbol_colon, symbol_comma, symbol_semicolon,
 };
-use wp_parser::utils::{RestAble, err_convert, get_scope};
+use wp_primitives::utils::{RestAble, err_convert, get_scope};
 use wpl::parser::datatype::take_datatype;
 use wpl::parser::utils::{peek_str, take_key};
 
@@ -330,7 +330,7 @@ pub fn oml_tdo_get(data: &mut &str) -> WResult<RecordOperation> {
     let x = oml_var_get.parse_next(data)?;
     builder.dat_get(x);
     multispace0.parse_next(data)?;
-    if let Ok(c) = wp_parser::utils::peek_one.parse_next(data) {
+    if let Ok(c) = wp_primitives::utils::peek_one.parse_next(data) {
         if c == "{" {
             let o = oml_default_body.parse_next(data)?;
             builder.default_val(Some(o));

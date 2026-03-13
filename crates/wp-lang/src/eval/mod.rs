@@ -19,4 +19,5 @@ pub use runtime::vm_unit::OPTIMIZE_TIMES;
 pub use runtime::vm_unit::{DataResult, WplEvaluator};
 pub use value::ParserFactory;
 pub use value::data_type::DataTypeParser;
+pub(crate) use value::literal;
 pub use wp_parse_api::{WparseError, WparseReason, WparseResult};

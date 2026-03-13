@@ -9,9 +9,9 @@ use winnow::combinator::fail;
 use winnow::error::StrContext;
 use winnow::token::take_until;
 
-use wp_parser::Parser;
-use wp_parser::WResult;
-use wp_parser::symbol::ctx_desc;
+use wp_primitives::Parser;
+use wp_primitives::WResult;
+use wp_primitives::symbol::ctx_desc;
 
 use crate::language::{ArgsTakeAble, CondAccessor, PreciseEvaluator, SqlQuery};
 use crate::parser::keyword::{kw_sql_select, kw_sql_where};
@@ -254,7 +254,7 @@ pub fn oml_aga_sql(data: &mut &str) -> WResult<PreciseEvaluator> {
 mod tests {
     use wp_data_model::cache::FieldQueryCache;
     use wp_model_core::model::{DataField, DataRecord, FieldStorage};
-    use wp_parser::WResult as ModalResult;
+    use wp_primitives::WResult as ModalResult;
 
     use crate::parser::utils::for_test::assert_oml_parse;
     use crate::parser::{sql_prm::oml_sql, utils::for_test::err_of_oml};

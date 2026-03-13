@@ -15,7 +15,7 @@ use orion_error::TestAssert;
 use wp_data_fmt::{DataFormat, Raw};
 use wp_model_core::model::DataField;
 use wp_model_core::model::DataType;
-use wp_parser::WResult as ModalResult;
+use wp_primitives::WResult as ModalResult;
 
 pub struct ParserTestEnv {
     pub gch: GenChannel,

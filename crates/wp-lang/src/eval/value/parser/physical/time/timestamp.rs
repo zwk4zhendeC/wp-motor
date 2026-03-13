@@ -8,7 +8,7 @@ use winnow::stream::Stream as _;
 use winnow::token::take;
 use wp_model_core::model::DataField;
 use wp_model_core::model::FNameStr;
-use wp_parser::WResult;
+use wp_primitives::WResult;
 
 #[derive(Default)]
 pub struct TimeStampPSR {}
@@ -45,7 +45,7 @@ fn parse_timestamp(data: &mut &str) -> WResult<chrono::DateTime<chrono::Utc>> {
     } else {
         let cp = (*data).checkpoint();
         Err(winnow::error::ErrMode::Backtrack(
-            wp_parser::utils::context_error(data, &cp, "timestamp fail"),
+            wp_primitives::utils::context_error(data, &cp, "timestamp fail"),
         ))
     }
 }
@@ -56,7 +56,7 @@ fn parse_timestamp_ms(data: &mut &str) -> WResult<chrono::DateTime<chrono::Utc>>
     } else {
         let cp = (*data).checkpoint();
         Err(winnow::error::ErrMode::Backtrack(
-            wp_parser::utils::context_error(data, &cp, "timestamp_millis fail"),
+            wp_primitives::utils::context_error(data, &cp, "timestamp_millis fail"),
         ))
     }
 }
@@ -67,7 +67,7 @@ fn parse_timestamp_us(data: &mut &str) -> WResult<chrono::DateTime<chrono::Utc>>
     } else {
         let cp = (*data).checkpoint();
         Err(winnow::error::ErrMode::Backtrack(
-            wp_parser::utils::context_error(data, &cp, "timestamp_micros fail"),
+            wp_primitives::utils::context_error(data, &cp, "timestamp_micros fail"),
         ))
     }
 }

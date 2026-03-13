@@ -5,10 +5,10 @@ use winnow::error::{ContextError, ErrMode};
 use winnow::stream::Stream;
 use winnow::token::{any, literal, none_of, one_of, take, take_until, take_while};
 use wp_model_core::model::Value;
-use wp_parser::Parser;
-use wp_parser::WResult;
+use wp_primitives::Parser;
+use wp_primitives::WResult;
 
-use wp_parser::symbol::ctx_desc;
+use wp_primitives::symbol::ctx_desc;
 
 //#[allow(clippy::nonminimal_bool)]
 pub fn take_ref_path<'a>(input: &mut &'a str) -> WResult<&'a str> {
@@ -539,7 +539,7 @@ mod tests {
     use crate::parser::wpl_pkg::wpl_package;
     use orion_error::TestAssert;
     use winnow::LocatingSlice;
-    use wp_parser::WResult as ModalResult;
+    use wp_primitives::WResult as ModalResult;
 
     #[test]
     fn test_take_val() -> ModalResult<()> {

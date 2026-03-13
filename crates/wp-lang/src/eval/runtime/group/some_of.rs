@@ -5,7 +5,7 @@ use winnow::stream::Stream;
 // Use workspace-level parser result alias
 use wp_log::trace_edata;
 use wp_model_core::model::DataField;
-use wp_parser::WResult as ModalResult;
+use wp_primitives::WResult as ModalResult;
 
 impl LogicProc for GroupSomeOf {
     fn process(
@@ -44,7 +44,7 @@ mod tests {
     use crate::types::AnyResult;
     use crate::{WplEvaluator, wpl_express};
     use orion_error::TestAssert;
-    use wp_parser::Parser;
+    use wp_primitives::Parser;
 
     #[test]
     fn test_some_of_group1() -> AnyResult<()> {

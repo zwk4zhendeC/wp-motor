@@ -5,7 +5,7 @@ mod tests {
     use crate::types::AnyResult;
     use orion_error::TestAssert;
     use wp_model_core::raw::RawData;
-    use wp_parser::Parser;
+    use wp_primitives::Parser;
 
     #[test]
     fn test_err_1() {

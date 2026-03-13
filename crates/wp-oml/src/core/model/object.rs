@@ -10,7 +10,7 @@ use wp_data_model::cache::FieldQueryCache;
 use wp_error::parse_error::{OMLCodeError, OMLCodeReason, OMLCodeResult};
 use wp_model_core::model::DataRecord;
 use wp_model_core::model::FieldStorage;
-use wp_parser::comment::CommentParser;
+use wp_primitives::comment::CommentParser;
 
 impl DataTransformer for ObjModel {
     fn transform(&self, data: DataRecord, cache: &mut FieldQueryCache) -> DataRecord {

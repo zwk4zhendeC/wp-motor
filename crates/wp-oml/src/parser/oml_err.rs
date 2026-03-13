@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
     use crate::parser::oml_parse_raw;
-    use wp_parser::Parser;
-    use wp_parser::WResult as ModalResult;
+    use wp_primitives::Parser;
+    use wp_primitives::WResult as ModalResult;
     use wpl::parser::error::WplCodeError;
     use wpl::parser::error::WplCodeReason;
 

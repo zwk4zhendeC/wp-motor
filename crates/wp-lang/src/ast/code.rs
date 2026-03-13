@@ -10,7 +10,7 @@ use crate::parser::wpl_rule::wpl_rule;
 use crate::winnow::Parser;
 use derive_getters::Getters;
 use orion_error::{ErrorOwe, ErrorWith, ToStructError, UvsFrom};
-use wp_parser::comment::CommentParser;
+use wp_primitives::comment::CommentParser;
 
 #[derive(Debug, Clone, Getters)]
 pub struct WplCode {

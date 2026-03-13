@@ -1,5 +1,5 @@
 use wp_model_core::model::{DataField, DataRecord, DataType};
-use wp_parser::WResult as ModalResult;
+use wp_primitives::WResult as ModalResult;
 
 use crate::{WplSep, ast::fld_fmt::WplFieldFmt};
 

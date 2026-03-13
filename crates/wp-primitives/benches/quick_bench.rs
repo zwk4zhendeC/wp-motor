@@ -1,9 +1,9 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 use winnow::Parser;
-use wp_parser::atom::*;
-use wp_parser::scope::ScopeEval;
-use wp_parser::utils::get_scope;
+use wp_primitives::atom::*;
+use wp_primitives::scope::ScopeEval;
+use wp_primitives::utils::get_scope;
 
 fn quick_benchmarks(c: &mut Criterion) {
     // Benchmark: Variable name parsing (zero-copy optimization)

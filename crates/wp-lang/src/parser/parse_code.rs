@@ -7,9 +7,9 @@ use anyhow::anyhow;
 use winnow::ascii::multispace0;
 use winnow::combinator::{cut_err, delimited, opt};
 use winnow::token::literal;
-use wp_parser::Parser;
-use wp_parser::WResult;
-use wp_parser::symbol::ctx_desc;
+use wp_primitives::Parser;
+use wp_primitives::WResult;
+use wp_primitives::symbol::ctx_desc;
 
 use super::wpl_anno::ann_fun;
 //parentheses

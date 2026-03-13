@@ -1,23 +1,28 @@
 use crate::DataTypeParser;
-use crate::parser::utils::take_meta_name;
 use smol_str::SmolStr;
 use std::fmt::Display;
 use winnow::ascii::multispace0;
 use winnow::combinator::fail;
 use winnow::error::StrContext;
 use winnow::stream::Stream;
+use winnow::token::take_while;
 use wp_model_core::model::FNameStr;
 use wp_model_core::model::{DataField, DataType};
-use wp_parser::Parser;
-use wp_parser::WResult;
-use wp_parser::atom::{take_parentheses_val, take_var_name};
-use wp_parser::symbol::ctx_desc;
+use wp_primitives::Parser;
+use wp_primitives::WResult;
+use wp_primitives::atom::{take_parentheses_val, take_var_name};
+use wp_primitives::symbol::ctx_desc;
+
+fn take_meta_name<'a>(input: &mut &'a str) -> WResult<&'a str> {
+    take_while(1.., |c: char| c.is_alphanumeric() || c == '_' || c == '/').parse_next(input)
+}
 
 pub fn take_datatype(data: &mut &str) -> WResult<DataType> {
     take_datatype_impl
         .context(StrContext::Label("<datatype>"))
         .parse_next(data)
 }
+
 pub fn take_datatype_impl(data: &mut &str) -> WResult<DataType> {
     let _ = multispace0.parse_next(data)?;
     let cp = data.checkpoint();
@@ -45,14 +50,11 @@ pub fn field_ins<N: Into<FNameStr>, V: Into<SmolStr> + Display>(
 }
 
 pub fn take_field(data: &mut &str) -> WResult<DataField> {
-    // 解析类型化字面量：ip(...)/digit(...)/chars(...)
-    // 语义上这是“无名值”，字段名应为空字符串，类型由 meta 承担。
-    // 过去实现将标识符作为 name（如 "ip"），与下游比较语义不一致。
-    // 此处修正为：name = ""，只保留 meta+value。
-    let key = take_var_name.parse_next(data)?; // e.g. "ip"
-    let value = take_parentheses_val.parse_next(data)?; // e.g. "127.0.0.1"
-    let mut key_for_meta = key; // 用副本喂给 take_datatype
-    let meta = take_datatype(&mut key_for_meta)?; // DataType::IP
-    let target = field_ins(meta, "", &value)?; // typed literal has no field name
+    // Typed literals are nameless values: keep only meta + value.
+    let key = take_var_name.parse_next(data)?;
+    let value = take_parentheses_val.parse_next(data)?;
+    let mut key_for_meta = key;
+    let meta = take_datatype(&mut key_for_meta)?;
+    let target = field_ins(meta, "", &value)?;
     Ok(target)
 }

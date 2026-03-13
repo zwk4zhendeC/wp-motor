@@ -4,8 +4,8 @@ use crate::eval::runtime::group::WplEvalGroup;
 use once_cell::sync::OnceCell;
 use winnow::combinator::fail;
 use wp_model_core::model::{DataField, Value};
-use wp_parser::symbol::ctx_desc;
-use wp_parser::{Parser, WResult as ModalResult};
+use wp_primitives::symbol::ctx_desc;
+use wp_primitives::{Parser, WResult as ModalResult};
 
 /// Heuristic thresholds to enable FieldIndex for Fun pipes.
 /// Can be overridden via environment variables at process start:

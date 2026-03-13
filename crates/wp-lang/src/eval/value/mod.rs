@@ -2,6 +2,7 @@ pub mod data_type;
 mod error;
 pub(crate) mod field_parse;
 pub mod generate;
+pub mod literal;
 pub mod mechanism;
 pub mod parse_def;
 pub mod parser;

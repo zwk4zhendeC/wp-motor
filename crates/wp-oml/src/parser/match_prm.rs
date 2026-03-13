@@ -12,14 +12,14 @@ use winnow::combinator::{alt, opt, peek, repeat};
 use winnow::error::{ContextError, StrContext, StrContextValue};
 use winnow::stream::Stream;
 use winnow::token::take;
-use wp_parser::Parser;
-use wp_parser::WResult;
-use wp_parser::symbol::ctx_desc;
-use wp_parser::symbol::{
+use wp_primitives::Parser;
+use wp_primitives::WResult;
+use wp_primitives::symbol::ctx_desc;
+use wp_primitives::symbol::{
     symbol_brace_beg, symbol_brace_end, symbol_comma, symbol_marvel, symbol_match_to, symbol_pipe,
     symbol_semicolon, symbol_under_line,
 };
-use wp_parser::utils::get_scope;
+use wp_primitives::utils::get_scope;
 use wpl::parser::utils::quot_str;
 
 use super::syntax;
@@ -328,7 +328,7 @@ mod tests {
     use orion_error::TestAssert;
     use wp_model_core::model::{DataField, FieldStorage};
 
-    use wp_parser::WResult as ModalResult;
+    use wp_primitives::WResult as ModalResult;
 
     use crate::language::MatchCase;
     use crate::parser::match_prm::{match_cond_multi_item, match_cond1_item, oml_aga_match};
@@ -836,7 +836,7 @@ Result = match read(status) {
 
     #[test]
     fn test_match_with_regex() {
-        use wp_parser::Parser;
+        use wp_primitives::Parser;
 
         // Test regex matching - verify round-trip parsing works
         let mut code = r#" match read(log_line) {
@@ -938,7 +938,7 @@ Result = match read(status) {
 
     #[test]
     fn test_match_function_escaping_round_trip() {
-        use wp_parser::Parser;
+        use wp_primitives::Parser;
 
         // Test strings with special characters in match functions
         let test_cases = vec![
@@ -1049,7 +1049,7 @@ Result = match read(status) {
 
     #[test]
     fn test_match_triple_round_trip() {
-        use wp_parser::Parser;
+        use wp_primitives::Parser;
 
         let mut code = r#" match ( read(a), read(b), read(c) ) {
         (chars(x), chars(y), chars(z)) => chars(ok),
@@ -1071,7 +1071,7 @@ Result = match read(status) {
 
     #[test]
     fn test_match_quadruple_round_trip() {
-        use wp_parser::Parser;
+        use wp_primitives::Parser;
 
         let mut code = r#" match ( read(a), read(b), read(c), read(d) ) {
         (chars(1), chars(2), chars(3), chars(4)) => chars(ok),
@@ -1261,7 +1261,7 @@ Result = match (read(a), read(b), read(c), read(d)) {
 
     #[test]
     fn test_or_round_trip() {
-        use wp_parser::Parser;
+        use wp_primitives::Parser;
 
         let mut code = r#" match read(city) {
             chars(bj) | chars(sh) => chars(east),

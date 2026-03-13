@@ -9,8 +9,8 @@ use std::borrow::Cow;
 use std::fmt::{Debug, Display, Formatter};
 use wp_model_core::model::FNameStr;
 use wp_model_core::model::{DataType, MetaErr};
-use wp_parser::Parser;
-use wp_parser::WResult;
+use wp_primitives::Parser;
+use wp_primitives::WResult;
 
 pub const DEFAULT_FIELD_KEY: &str = "*";
 #[derive(Debug, Clone, PartialEq, Getters)]

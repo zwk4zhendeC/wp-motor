@@ -1,6 +1,6 @@
 // Use centralized alias for parser result, avoid direct dependency on winnow type name
 use wp_model_core::model::DataField;
-use wp_parser::WResult as ModalResult;
+use wp_primitives::WResult as ModalResult;
 
 use crate::WplSep;
 

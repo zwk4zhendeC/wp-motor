@@ -15,7 +15,7 @@ use wp_model_core::model::DataField;
 use wp_model_core::model::DataRecord;
 use wp_model_core::model::Value;
 use wp_model_core::model::types::value::ObjectValue;
-use wp_parser::WResult as ModalResult;
+use wp_primitives::WResult as ModalResult;
 #[test]
 fn test_crate_get() {
     let cache = &mut FieldQueryCache::default();

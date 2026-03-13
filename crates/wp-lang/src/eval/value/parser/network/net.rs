@@ -13,7 +13,7 @@ use rand::RngExt;
 use winnow::ascii::digit1;
 use winnow::combinator::separated_pair;
 use wp_model_core::model::IpNetValue;
-use wp_parser::net::ip;
+use wp_primitives::net::ip;
 
 derive_base_prs!(IpPSR);
 
@@ -116,7 +116,7 @@ impl PatternParser for IpNetP {
 mod tests {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-    use wp_parser::Parser;
+    use wp_primitives::Parser;
 
     use crate::ast::WplField;
     use crate::eval::value::parser::base::digit::DigitP;

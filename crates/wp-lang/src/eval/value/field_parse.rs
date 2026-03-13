@@ -3,9 +3,9 @@ use winnow::ascii::multispace0;
 use winnow::combinator::{delimited, fail};
 use winnow::error::{StrContext, StrContextValue};
 use winnow::token::{literal, take_until};
-use wp_parser::Parser;
-use wp_parser::WResult as ModalResult;
-use wp_parser::symbol::ctx_desc;
+use wp_primitives::Parser;
+use wp_primitives::WResult as ModalResult;
+use wp_primitives::symbol::ctx_desc;
 
 pub trait FieldParse {
     fn scope_field<'a>(&self, data: &mut &'a str) -> ModalResult<&'a str>;

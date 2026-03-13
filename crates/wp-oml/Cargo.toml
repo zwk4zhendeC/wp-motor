@@ -13,7 +13,8 @@ winnow = { workspace = true }
 orion-error = { workspace = true }
 orion_conf= { workspace = true }
 wp_knowledge = { package = "wp-knowledge", path = "../wp-knowledge" }
-wp_parser = { package = "wp-parser", path = "../wp-parser" }
+wp_primitives = { package = "wp-primitives", path = "../wp-primitives" }
+wp_condition = { package = "wp-condition", path = "../wp-condition" }
 orion_exp = { path = "../orion_exp" }
 wp-model-core = { workspace = true  }
 wp_data_model= { workspace = true  }

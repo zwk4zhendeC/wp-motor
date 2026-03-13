@@ -4,7 +4,7 @@ use crate::eval::runtime::group::{LogicProc, WplEvalGroup};
 use winnow::stream::Stream;
 use wp_log::trace_edata;
 use wp_model_core::model::DataField;
-use wp_parser::WResult as ModalResult;
+use wp_primitives::WResult as ModalResult;
 
 impl LogicProc for GroupAlt {
     fn process(
@@ -63,7 +63,7 @@ mod tests {
     use orion_error::TestAssert;
     use std::net::{IpAddr, Ipv4Addr};
     use wp_model_core::model::DataField;
-    use wp_parser::Parser;
+    use wp_primitives::Parser;
 
     #[test]
     fn test_alt_group() -> AnyResult<()> {

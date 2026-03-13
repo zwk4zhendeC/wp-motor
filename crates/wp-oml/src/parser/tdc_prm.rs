@@ -2,8 +2,8 @@ use crate::language::{BatchEvaluation, PreciseEvaluator};
 use crate::parser::oml_aggregate;
 use crate::parser::syntax::oml_value;
 use winnow::ascii::multispace0;
-use wp_parser::Parser;
-use wp_parser::WResult;
+use wp_primitives::Parser;
+use wp_primitives::WResult;
 use wpl::parser::utils::take_sql_tval;
 
 pub fn oml_aga_value(data: &mut &str) -> WResult<PreciseEvaluator> {
@@ -36,8 +36,8 @@ mod tests {
     use orion_error::{ToStructError, UvsFrom};
     use wp_error::OMLCodeReason;
     use wp_error::parse_error::OMLCodeResult;
-    use wp_parser::Parser;
-    use wp_parser::WResult as ModalResult;
+    use wp_primitives::Parser;
+    use wp_primitives::WResult as ModalResult;
 
     #[test]
     fn test_oml_take() -> OMLCodeResult<()> {

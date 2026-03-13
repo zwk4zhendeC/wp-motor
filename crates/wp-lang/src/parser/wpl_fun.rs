@@ -7,11 +7,11 @@ use winnow::{
     combinator::{alt, fail},
     token::literal,
 };
-use wp_parser::{
+use wp_primitives::{
     WResult,
     fun::{fun_trait::Fun0Builder, parser::call_fun_args0},
 };
-use wp_parser::{
+use wp_primitives::{
     atom::take_string,
     fun::{
         fun_trait::{Fun1Builder, Fun2Builder, ParseNext},
@@ -984,7 +984,7 @@ mod tests {
     #[test]
     fn test_parse_digit_range() {
         use winnow::Parser;
-        use wp_parser::fun::parser::call_fun_args2;
+        use wp_primitives::fun::parser::call_fun_args2;
 
         // Direct test of DigitRangeArg parser - simple case
         let mut input = "digit_range(1, 10)";

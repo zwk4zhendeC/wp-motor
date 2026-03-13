@@ -10,9 +10,9 @@ use winnow::ascii::{Caseless, hex_uint};
 use winnow::combinator::{opt, preceded};
 use wp_model_core::model::FNameStr;
 use wp_model_core::model::{DataField, DataType, HexT};
-use wp_parser::Parser;
-use wp_parser::WResult as ModalResult;
-use wp_parser::symbol::ctx_desc;
+use wp_primitives::Parser;
+use wp_primitives::WResult as ModalResult;
+use wp_primitives::symbol::ctx_desc;
 
 #[derive(Default)]
 pub struct HexDigitP {}

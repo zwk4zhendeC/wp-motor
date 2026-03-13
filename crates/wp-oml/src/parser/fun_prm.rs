@@ -4,9 +4,9 @@ use crate::language::{
 };
 use winnow::ascii::multispace0;
 use winnow::combinator::alt;
-use wp_parser::Parser;
-use wp_parser::WResult;
-use wp_parser::utils::get_scope;
+use wp_primitives::Parser;
+use wp_primitives::WResult;
+use wp_primitives::utils::get_scope;
 
 pub fn oml_gw_fun(data: &mut &str) -> WResult<PreciseEvaluator> {
     let fun = oml_fun_item.parse_next(data)?;
@@ -29,7 +29,7 @@ pub fn oml_fun_item(data: &mut &str) -> WResult<BuiltinFunction> {
 mod tests {
     use crate::parser::fun_prm::oml_gw_fun;
     use crate::parser::utils::for_test::assert_oml_parse;
-    use wp_parser::WResult as ModalResult;
+    use wp_primitives::WResult as ModalResult;
 
     #[test]
     fn test_oml_crate_lib() -> ModalResult<()> {

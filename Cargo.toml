@@ -39,12 +39,13 @@ members = [
     # --- Core Infrastructure ---
     "crates/orion_overload", # Common utilities and primitives
     "crates/orion_exp", # Expression evaluation
+    "crates/wp-primitives", # Shared parsing primitives
+    "crates/wp-condition", # Condition parser over orion_exp
 
     # --- Configuration ---
     "crates/wp-config", # Engine configuration management
     "crates/wp-data-utils",
     # --- Language & Parsing ---
-    "crates/wp-parser", # Low-level parsing primitives
     "crates/wp-lang", # WPL (Warp Processing Language)
     "crates/wp-oml", # OML (Object Modeling Language)
     "crates/wp-knowledge", # Knowledge database (KnowDB)
@@ -166,7 +167,7 @@ wp_conf = { package = "wp-config", path = "crates/wp-config" }
 wp_knowledge = { package = "wp-knowledge", path = "crates/wp-knowledge" }
 
 # --- Internal: Language & Parsing ---
-wp_parser = { package = "wp-parser", path = "crates/wp-parser" }
+wp_primitives = { package = "wp-primitives", path = "crates/wp-primitives" }
 wpl = { package = "wp-lang", path = "crates/wp-lang" }
 oml = { package = "wp-oml", path = "crates/wp-oml", features = ["oml-diag"] }
 
@@ -383,13 +384,14 @@ libfuzzer-sys = "0.4"
 # --- Internal: Core Crates ---
 orion_overload = { path = "./crates/orion_overload" }
 orion_exp = { path = "./crates/orion_exp" }
+wp_primitives = { package = "wp-primitives", path = "./crates/wp-primitives" }
+wp_condition = { package = "wp-condition", path = "./crates/wp-condition" }
 wp_cli_core = { package = "wp-cli-core", path = "./crates/wp-cli-core" }
 wp_config = { package = "wp-config", path = "./crates/wp-config" }
 wp_data_model = { package = "wp-data-utils", path = "./crates/wp-data-utils" }
 wp_knowledge = { package = "wp-knowledge", path = "./crates/wp-knowledge" }
 wp_lang = { package = "wp-lang", path = "./crates/wp-lang" }
 wp_oml = { package = "wp-oml", path = "./crates/wp-oml" }
-wp_parser = { package = "wp-parser", path = "./crates/wp-parser" }
 wp_proj = { package = "wp-proj", path = "./crates/wp-proj" }
 wp_stats = { package = "wp-stats", path = "./crates/wp-stats" }
 wp_core_connectors = { package = "wp-core-connectors", path = "./crates/wp-core-connectors" }

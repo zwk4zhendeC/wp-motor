@@ -1,7 +1,7 @@
 use orion_exp::CmpOperator;
-use wp_parser::atom::take_var_name;
-use wp_parser::cond::{CmpParser, ConditionParser};
-use wp_parser::sql_symbol::symbol_sql_cmp; // for operator flip when normal form not matched
+use wp_condition::cond::{CmpParser, ConditionParser};
+use wp_condition::sql_symbol::symbol_sql_cmp;
+use wp_primitives::atom::take_var_name; // for operator flip when normal form not matched
 
 use crate::language::CompareExpress;
 use crate::language::CondAccessor;
@@ -9,8 +9,8 @@ use crate::language::PreciseEvaluator;
 use crate::parser::oml_acq::oml_cond_acq;
 use orion_exp::SQLSymbol;
 use winnow::stream::Stream;
-use wp_parser::Parser;
-use wp_parser::WResult; // for checkpoint/reset on &str parser input
+use wp_primitives::Parser;
+use wp_primitives::WResult; // for checkpoint/reset on &str parser input
 
 #[cfg(test)]
 #[allow(dead_code)]
@@ -116,7 +116,7 @@ fn render_sql_literal_for_value(v: &wp_model_core::model::Value) -> String {
 #[cfg(test)]
 mod tests {
 
-    use wp_parser::WResult as ModalResult; // test helper
+    use wp_primitives::WResult as ModalResult; // test helper
 
     //use orion_overload::cond::LogicalExpression;
     //

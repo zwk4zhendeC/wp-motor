@@ -4,7 +4,7 @@ use smol_str::SmolStr;
 use std::collections::VecDeque;
 use std::fmt::{Display, Formatter};
 use std::io::Write;
-use wp_parser::Parser;
+use wp_primitives::Parser;
 
 use crate::ast::debug::{DebugFormat, DepIndent};
 use crate::ast::{WplRule, WplRuleMeta, WplTag};

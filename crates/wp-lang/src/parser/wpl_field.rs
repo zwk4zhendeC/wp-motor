@@ -17,13 +17,13 @@ use winnow::stream::Stream;
 use winnow::token::{literal, take, take_till};
 // Use workspace-wide parser result alias to decouple from winnow's concrete type
 use wp_model_core::model::DataType;
-use wp_parser::Parser;
-use wp_parser::WResult as ModalResult;
-use wp_parser::symbol::{ctx_desc, ctx_literal};
-use wp_parser::utils::{RestAble, get_scope};
+use wp_primitives::Parser;
+use wp_primitives::WResult as ModalResult;
+use wp_primitives::symbol::{ctx_desc, ctx_literal};
+use wp_primitives::utils::{RestAble, get_scope};
 
 // Removed unused generic helper that depended on winnow's two-parameter ModalResult.
-// If needed later, prefer concrete `&str` + `ModalResult` signatures via wp_parser::WResult.
+// If needed later, prefer concrete `&str` + `ModalResult` signatures via wp_primitives::WResult.
 
 pub fn wpl_end_sep_str(input: &mut &str) -> ModalResult<String> {
     repeat(1.., preceded(literal("\\"), take(1u8)))

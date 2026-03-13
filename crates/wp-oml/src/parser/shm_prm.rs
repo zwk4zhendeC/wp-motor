@@ -8,7 +8,7 @@ use crate::oml_parser::keyword::{kw_gw_query, kw_lib, kw_where};
 use crate::oml_parser::oml_aggregate::oml_var_get;
 use crate::oml_parser::syntax;
 use crate::oml_parser::syntax::oml_value;
-use wp_parser::utils::get_scope;
+use wp_primitives::utils::get_scope;
 
 pub fn oml_aga_shmlib(data: &mut &str) -> WResult<PreciseEvaluator> {
     kw_gw_query.parse_next(data)?;
@@ -20,7 +20,7 @@ pub fn oml_aga_shmlib(data: &mut &str) -> WResult<PreciseEvaluator> {
         repeat(0.., syntax::oml_properties).parse_next(&mut code.as_str())?;
 
     let builder = build_query(lib, oct, args)?;
-    wp_parser::utils::err_convert(builder.build()).map(PreciseEvaluator::Query)
+    wp_primitives::utils::err_convert(builder.build()).map(PreciseEvaluator::Query)
 }
 
 pub fn oml_query_lib(data: &mut &str) -> WResult<String> {
@@ -60,7 +60,7 @@ fn build_query(
 
 #[cfg(test)]
 mod tests {
-    use wp_parser::WResult as ModalResult;
+    use wp_primitives::WResult as ModalResult;
 
     use crate::oml_parser::shm_prm::oml_aga_shmlib;
     use crate::oml_parser::utils::for_test::assert_oml_parse;

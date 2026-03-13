@@ -1,9 +1,9 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 use winnow::Parser;
-use wp_parser::atom::*;
-use wp_parser::scope::ScopeEval;
-use wp_parser::utils::{get_scope, peek_one};
+use wp_primitives::atom::*;
+use wp_primitives::scope::ScopeEval;
+use wp_primitives::utils::{get_scope, peek_one};
 
 /// Benchmark for variable name parsing (now returns &str, zero-copy)
 fn bench_take_var_name(c: &mut Criterion) {

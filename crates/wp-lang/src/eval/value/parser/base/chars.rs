@@ -14,8 +14,8 @@ use winnow::ascii::{digit1, multispace0};
 use winnow::combinator::{alt, preceded};
 use wp_model_core::model::{DataField, Value};
 use wp_model_core::model::{DataType, DigitValue};
-use wp_parser::Parser;
-use wp_parser::WResult as ModalResult;
+use wp_primitives::Parser;
+use wp_primitives::WResult as ModalResult;
 
 #[derive(Default)]
 pub struct CharsP {}

@@ -8,7 +8,7 @@ use crate::parser::utils::quot_str;
 use winnow::ascii::{digit1, multispace0};
 use winnow::combinator::{fail, preceded, separated};
 use wp_model_core::model::DigitValue;
-use wp_parser::symbol::{ctx_desc, symbol_brackets_beg, symbol_brackets_end};
+use wp_primitives::symbol::{ctx_desc, symbol_brackets_beg, symbol_brackets_end};
 
 #[derive(Default)]
 pub struct ArrayP {}

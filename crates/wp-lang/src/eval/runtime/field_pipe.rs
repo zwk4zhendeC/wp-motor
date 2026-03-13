@@ -1,7 +1,7 @@
 use ahash::RandomState;
 use std::collections::HashMap;
 use wp_model_core::model::DataField;
-use wp_parser::WResult as ModalResult;
+use wp_primitives::WResult as ModalResult;
 
 use crate::ast::WplFun;
 use crate::eval::runtime::group::WplEvalGroup;

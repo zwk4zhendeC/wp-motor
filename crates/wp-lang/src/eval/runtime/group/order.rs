@@ -3,8 +3,8 @@ use orion_overload::new::New3;
 use winnow::combinator::{fail, trace};
 use wp_model_core::model::DataField;
 
-use wp_parser::Parser;
-use wp_parser::WResult as ModalResult;
+use wp_primitives::Parser;
+use wp_primitives::WResult as ModalResult;
 
 use crate::ast::WplSep;
 use crate::ast::group::{GroupSeq, WplGroupType};
@@ -12,7 +12,7 @@ use crate::eval::runtime::field::FieldEvalUnit;
 use crate::eval::runtime::vm_unit::StopWatch;
 
 use crate::eval::desc::group_idx_desc;
-use wp_parser::symbol::ctx_desc;
+use wp_primitives::symbol::ctx_desc;
 
 use super::LogicProc;
 
@@ -141,7 +141,7 @@ impl WplEvalGroup {
 #[cfg(test)]
 mod tests {
     use orion_error::TestAssert;
-    use wp_parser::Parser;
+    use wp_primitives::Parser;
 
     use crate::ast::WplSep;
     use crate::eval::runtime::vm_unit::WplEvaluator;

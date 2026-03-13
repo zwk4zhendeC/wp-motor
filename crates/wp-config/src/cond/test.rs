@@ -3,7 +3,7 @@ use std::net::Ipv4Addr;
 use crate::cond::parse::WarpConditionParser;
 use wp_data_model::conditions::evaluate_expression;
 use wp_model_core::model::{DataField, DataRecord};
-use wp_parser::WResult as ModalResult;
+use wp_primitives::WResult as ModalResult;
 
 #[test]
 pub fn test_express_exec_simple() -> ModalResult<()> {

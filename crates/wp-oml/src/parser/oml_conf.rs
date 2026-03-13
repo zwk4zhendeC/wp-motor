@@ -14,11 +14,11 @@ use winnow::stream::Stream;
 use wp_data_model::cache::FieldQueryCache;
 use wp_error::{OMLCodeError, OMLCodeResult};
 use wp_model_core::model::{DataField, DataRecord};
-use wp_parser::Parser;
-use wp_parser::WResult;
-use wp_parser::atom::{take_obj_path, take_var_name};
-use wp_parser::symbol::symbol_colon;
-use wp_parser::utils::get_scope;
+use wp_primitives::Parser;
+use wp_primitives::WResult;
+use wp_primitives::atom::{take_obj_path, take_var_name};
+use wp_primitives::symbol::symbol_colon;
+use wp_primitives::utils::get_scope;
 use wpl::parser::utils::peek_str;
 
 use super::keyword::kw_oml_rule;
@@ -492,9 +492,9 @@ pub fn oml_conf_enable(data: &mut &str) -> WResult<bool> {
 mod tests {
     use crate::parser::oml_conf::oml_parse_raw;
     use crate::parser::utils::for_test::{assert_oml_parse, assert_oml_parse_ext};
-    use wp_parser::Parser;
-    use wp_parser::WResult as ModalResult;
-    use wp_parser::comment::CommentParser;
+    use wp_primitives::Parser;
+    use wp_primitives::WResult as ModalResult;
+    use wp_primitives::comment::CommentParser;
 
     #[test]
     fn test_conf_sample() -> ModalResult<()> {

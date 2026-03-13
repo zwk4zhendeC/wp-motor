@@ -10,11 +10,11 @@ pub use winnow::combinator::{alt, delimited, opt, preceded};
 pub use winnow::error::ErrMode;
 pub use winnow::stream::Stream;
 pub use winnow::token::literal;
-pub use wp_parser::WResult;
+pub use wp_primitives::WResult;
 pub type ModalResult<T> = WResult<T>;
 pub use wp_model_core::model::{DataField, DataType};
-pub use wp_parser::Parser;
-pub use wp_parser::symbol::ctx_desc;
-pub use wp_parser::utils::context_error;
+pub use wp_primitives::Parser;
+pub use wp_primitives::symbol::ctx_desc;
+pub use wp_primitives::utils::context_error;
 
 pub use winnow::ascii::digit1;

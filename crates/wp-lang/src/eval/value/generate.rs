@@ -2,7 +2,7 @@
 mod test {
     use std::collections::HashMap;
 
-    use wp_parser::Parser;
+    use wp_primitives::Parser;
 
     use crate::types::AnyResult;
 

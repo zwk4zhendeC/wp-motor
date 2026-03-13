@@ -11,8 +11,8 @@ use wp_model_core::model::{DigitValue, Value};
 use winnow::ascii::{dec_int, multispace0};
 use winnow::combinator::alt;
 use winnow::combinator::preceded;
-use wp_parser::Parser;
-use wp_parser::WResult as ModalResult;
+use wp_primitives::Parser;
+use wp_primitives::WResult as ModalResult;
 
 use crate::eval::runtime::field::FieldEvalUnit;
 use crate::eval::value::parse_def::PatternParser;

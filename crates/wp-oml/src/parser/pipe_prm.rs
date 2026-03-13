@@ -21,11 +21,11 @@ use winnow::combinator::{alt, fail, opt, repeat};
 use winnow::error::{ContextError, ErrMode, StrContext};
 use winnow::stream::Stream; // for checkpoint/reset on &str
 use winnow::token::take;
-use wp_parser::Parser;
-use wp_parser::WResult;
-use wp_parser::fun::fun_trait::{Fun1Builder, Fun2Builder};
-use wp_parser::fun::parser;
-use wp_parser::symbol::{ctx_desc, symbol_pipe};
+use wp_primitives::Parser;
+use wp_primitives::WResult;
+use wp_primitives::fun::fun_trait::{Fun1Builder, Fun2Builder};
+use wp_primitives::fun::parser;
+use wp_primitives::symbol::{ctx_desc, symbol_pipe};
 use wpl::parser::utils::take_key;
 
 impl Fun1Builder for Nth {
@@ -339,7 +339,7 @@ pub fn oml_pipe(data: &mut &str) -> WResult<PipeFun> {
 mod tests {
     use crate::parser::pipe_prm::oml_aga_pipe;
     use crate::parser::utils::for_test::{assert_oml_parse, err_of_oml};
-    use wp_parser::WResult;
+    use wp_primitives::WResult;
 
     #[test]
     fn test_oml_crate_lib() -> WResult<()> {
@@ -388,7 +388,7 @@ mod tests {
     #[test]
     fn test_pipe_optional_keyword() -> WResult<()> {
         use crate::parser::pipe_prm::oml_aga_pipe_noprefix;
-        use wp_parser::Parser;
+        use wp_primitives::Parser;
 
         // Test pipe without 'pipe' keyword - should parse successfully
         let mut code = r#" take(ip) | to_str | to_json"#;
@@ -414,7 +414,7 @@ mod tests {
     #[test]
     fn test_map_to_large_integers() -> WResult<()> {
         use crate::parser::pipe_prm::oml_aga_pipe;
-        use wp_parser::Parser;
+        use wp_primitives::Parser;
 
         // Test large integer that would lose precision if parsed as f64 first
         // 9007199254740993 is 2^53 + 1, which cannot be exactly represented in f64
@@ -450,7 +450,7 @@ mod tests {
     #[test]
     fn test_string_escaping_round_trip() -> WResult<()> {
         use crate::parser::pipe_prm::oml_aga_pipe;
-        use wp_parser::Parser;
+        use wp_primitives::Parser;
 
         // Test round-trip parsing: parse -> display -> parse
         // The key is that Display output should be parseable

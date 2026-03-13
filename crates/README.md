@@ -2,7 +2,7 @@
 
 本目录存放工作区共享的 Rust 库（crates）。命名采用 kebab-case，并以 `wp-` 作为前缀统一领域归属；第三方/上游组件保留其原名。二进制应用位于 `apps/`，通常通过在 Cargo.toml 中添加 `package = "…"` 的方式引用这些库（保持现有 crate id 不变）。
 
-- 依赖约定：语言/解析相关在 `wp-lang`、`wp-primitives`、`wp-condition`、`wp-oml`；数据/类型在 `wp-data-utils`；错误在 `wp-error`；日志在 `wp-log`（基于 log/log4rs 封装）；配置在 `wp-config`；控制面在 `wp-ctrl-api`；I/O 接口在 `wp-source-api`、`wp-sink-api`；统计在 `wp-stats`；CLI 共用工具在 `wp-cli-utils`；通用设施在 `wp-common`。
+- 依赖约定：语言/解析相关在 `wp-lang`、`wp-condition`、`wp-oml`；其中 `wp-primitives` 已独立发布，不再位于本目录。数据/类型在 `wp-data-utils`；错误在 `wp-error`；日志在 `wp-log`（基于 log/log4rs 封装）；配置在 `wp-config`；控制面在 `wp-ctrl-api`；I/O 接口在 `wp-source-api`、`wp-sink-api`；统计在 `wp-stats`；CLI 共用工具在 `wp-cli-utils`；通用设施在 `wp-common`。
 - Feature 约定：Kafka 聚合开关使用 `kafka`；插件/商业能力在根工程聚合（见根 Cargo.toml 的 `features`）。
 
 ## 各 crate 简述
@@ -45,9 +45,6 @@
 
 - `wp-oml`
   - OML 语言与隐私处理：语法/解析/执行与隐私处理流水线（脱敏/掩码/规则），与 `wp-lang`、`wp-data-utils` 融合。
-
-- `wp-primitives`
-  - 轻量通用解析构件：原子/符号、函数调用参数、网络/IP、scope、comment 等基础解析设施。
 
 - `wp-condition`
   - 条件表达式解析：比较/逻辑表达式与 SQL 风格比较符解析；桥接到 `orion_exp`。

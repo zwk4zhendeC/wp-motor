@@ -28,7 +28,7 @@ wp-specs =  { workspace = true }
 wp-conf-base = { workspace = true }
 wp-connector-api ={ workspace=true }
 async-trait = { workspace = true }
-wp_primitives = { package = "wp-primitives", path = "../wp-primitives" }
+wp_primitives = { workspace = true }
 wp_condition = { package = "wp-condition", path = "../wp-condition" }
 log = { workspace = true }
 glob = { workspace = true }

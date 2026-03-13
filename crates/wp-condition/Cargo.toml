@@ -10,5 +10,5 @@ path = "src/lib.rs"
 
 [dependencies]
 orion_exp = { path = "../orion_exp" }
-wp_primitives = { package = "wp-primitives", path = "../wp-primitives" }
+wp_primitives = { workspace = true }
 winnow = { workspace = true }

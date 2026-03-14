@@ -3,7 +3,7 @@ use oml::core::DataTransformer;
 use oml::language::ObjModel;
 use oml::parser::oml_parse_raw;
 use std::hint::black_box;
-use wp_data_model::cache::FieldQueryCache;
+use wp_knowledge::cache::FieldQueryCache;
 use wp_knowledge::facade as kdb;
 use wp_knowledge::mem::memdb::MemDB;
 

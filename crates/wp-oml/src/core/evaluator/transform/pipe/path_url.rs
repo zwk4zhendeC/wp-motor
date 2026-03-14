@@ -60,7 +60,7 @@ impl ValueProcessor for UrlGet {
 mod tests {
     use crate::core::DataTransformer;
     use crate::parser::oml_parse_raw;
-    use wp_data_model::cache::FieldQueryCache;
+    use wp_knowledge::cache::FieldQueryCache;
     use wp_model_core::model::{DataField, DataRecord, FieldStorage};
 
     #[test]

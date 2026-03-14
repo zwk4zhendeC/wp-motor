@@ -46,7 +46,6 @@ members = [
     "crates/wp-data-utils",
     # --- Language & Parsing ---
     "crates/wp-oml", # OML (Object Modeling Language)
-    "crates/wp-knowledge", # Knowledge database (KnowDB)
 
     # --- CLI & Tools ---
     "crates/wp-cli-core", # CLI shared infrastructure
@@ -161,7 +160,7 @@ orion-variate = { workspace = true }
 
 # --- Internal: Configuration & Knowledge ---
 wp_conf = { package = "wp-config", path = "crates/wp-config" }
-wp_knowledge = { package = "wp-knowledge", path = "crates/wp-knowledge" }
+wp_knowledge = { workspace = true }
 
 # --- Internal: Language & Parsing ---
 wp_primitives = { workspace = true }
@@ -381,12 +380,12 @@ libfuzzer-sys = "0.4"
 # --- Internal: Core Crates ---
 orion_overload = { path = "./crates/orion_overload" }
 orion_exp = { path = "./crates/orion_exp" }
-wp_primitives = { package = "wp-primitives", version = "0.1.0" }
+wp_primitives = { package = "wp-primitives", version = "0.1" }
 wp_condition = { package = "wp-condition", path = "./crates/wp-condition" }
 wp_cli_core = { package = "wp-cli-core", path = "./crates/wp-cli-core" }
 wp_config = { package = "wp-config", path = "./crates/wp-config" }
 wp_data_model = { package = "wp-data-utils", path = "./crates/wp-data-utils" }
-wp_knowledge = { package = "wp-knowledge", path = "./crates/wp-knowledge" }
+wp_knowledge = { package = "wp-knowledge", version = "0.10" }
 wp_lang = { package = "wp-lang", version = "0.1" }
 wp_oml = { package = "wp-oml", path = "./crates/wp-oml" }
 wp_proj = { package = "wp-proj", path = "./crates/wp-proj" }

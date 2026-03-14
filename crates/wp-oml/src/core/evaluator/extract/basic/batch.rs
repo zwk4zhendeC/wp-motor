@@ -2,7 +2,7 @@ use crate::core::diagnostics::{self, OmlIssue, OmlIssueKind};
 use crate::core::prelude::*;
 use crate::language::BatchEvalTarget;
 use crate::language::{BatchEvalExp, BatchEvaluation, RecordOperation};
-use wp_data_model::cache::FieldQueryCache;
+use wp_knowledge::cache::FieldQueryCache;
 use wp_model_core::model::{DataField, DataRecord, FieldStorage};
 
 impl ExpEvaluator for BatchEvalExp {
@@ -69,7 +69,7 @@ mod tests {
     use crate::core::DataRecordRef;
     use crate::core::evaluator::traits::ExpEvaluator;
     use crate::language::BatchEvalExp;
-    use wp_data_model::cache::FieldQueryCache;
+    use wp_knowledge::cache::FieldQueryCache;
     use wp_model_core::model::{DataField, DataRecord, DataType, FieldStorage};
 
     #[test]

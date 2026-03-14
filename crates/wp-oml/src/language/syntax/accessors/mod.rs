@@ -5,7 +5,7 @@ use crate::language::EvaluationTarget;
 use crate::language::prelude::*;
 
 use wp_data_fmt::Json;
-use wp_data_model::cache::FieldQueryCache;
+use wp_knowledge::cache::FieldQueryCache;
 use wp_model_core::model::FieldStorage;
 
 use std::fmt::{Display, Formatter};

@@ -11,7 +11,7 @@ use derive_getters::Getters;
 use orion_overload::append::Appendable;
 use wp_conf::structure::SinkGroupConf;
 use wp_connector_api::{SinkError, SinkReason, SinkResult};
-use wp_data_model::cache::FieldQueryCache;
+use wp_knowledge::cache::FieldQueryCache;
 use wp_stat::StatReq;
 
 // split internal helpers

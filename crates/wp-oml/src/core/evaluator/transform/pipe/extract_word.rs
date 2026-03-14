@@ -425,7 +425,7 @@ mod tests {
     use crate::core::evaluator::transform::pipe::semantic_dict_loader::set_semantic_enabled;
     use crate::parser::oml_parse_raw;
     use orion_error::TestAssert;
-    use wp_data_model::cache::FieldQueryCache;
+    use wp_knowledge::cache::FieldQueryCache;
     use wp_model_core::model::{DataField, DataRecord, Value};
 
     /// 测试前启用语义功能开关

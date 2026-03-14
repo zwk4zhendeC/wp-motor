@@ -11,8 +11,8 @@ use winnow::ascii::multispace0;
 use winnow::combinator::repeat;
 use winnow::error::{ContextError, ErrMode, StrContext, StrContextValue};
 use winnow::stream::Stream;
-use wp_data_model::cache::FieldQueryCache;
 use wp_error::{OMLCodeError, OMLCodeResult};
+use wp_knowledge::cache::FieldQueryCache;
 use wp_model_core::model::{DataField, DataRecord, Value};
 use wp_primitives::Parser;
 use wp_primitives::WResult;
@@ -908,7 +908,7 @@ msg = chars('hello\nworld');
     fn test_temp_field_filter() -> ModalResult<()> {
         use crate::core::DataTransformer;
         use orion_error::TestAssert;
-        use wp_data_model::cache::FieldQueryCache;
+        use wp_knowledge::cache::FieldQueryCache;
         use wp_model_core::model::{DataRecord, DataType};
 
         // Test that fields starting with "__" are converted to ignore type
@@ -963,7 +963,7 @@ __another_temp = chars(also_temp);
     fn test_temp_field_in_computation() -> ModalResult<()> {
         use crate::core::DataTransformer;
         use orion_error::TestAssert;
-        use wp_data_model::cache::FieldQueryCache;
+        use wp_knowledge::cache::FieldQueryCache;
         use wp_model_core::model::{DataRecord, DataType};
 
         // Test that temporary fields can be used in intermediate computation

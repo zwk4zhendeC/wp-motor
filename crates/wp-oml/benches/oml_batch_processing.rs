@@ -2,7 +2,7 @@ use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_ma
 use oml::core::DataTransformer;
 use oml::language::ObjModel;
 use oml::parser::oml_parse_raw;
-use wp_data_model::cache::FieldQueryCache;
+use wp_knowledge::cache::FieldQueryCache;
 use wp_model_core::model::{DataField, DataRecord};
 
 fn build_model(code: &str) -> ObjModel {

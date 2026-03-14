@@ -5,7 +5,7 @@
 use oml::core::DataTransformer;
 use oml::parser::oml_parse_raw;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use wp_data_model::cache::FieldQueryCache;
+use wp_knowledge::cache::FieldQueryCache;
 use wp_model_core::model::{DataField, DataRecord};
 
 // Global counters for tracking FieldStorage creation

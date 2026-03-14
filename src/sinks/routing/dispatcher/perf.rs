@@ -15,7 +15,7 @@ use std::sync::Arc;
 use wp_conf::TCondParser;
 use wp_conf::structure::{FlexGroup, SinkGroupConf, SinkInstanceConf};
 use wp_connector_api::ParamMap;
-use wp_data_model::cache::FieldQueryCache;
+use wp_knowledge::cache::FieldQueryCache;
 use wp_model_core::model::fmt_def::TextFmt;
 use wp_model_core::model::{DataField, DataRecord, Value};
 use wp_model_core::raw::RawData;

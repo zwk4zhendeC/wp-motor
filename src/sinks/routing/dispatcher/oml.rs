@@ -12,8 +12,8 @@ use oml::core::DataTransformer;
 use oml::language::{DataModel, ObjModel};
 // std::collections used to be required for HashMap-based fanout; kept minimal now
 use wp_connector_api::SinkResult;
-use wp_data_model::cache::FieldQueryCache;
 use wp_data_model::conditions::evaluate_expression;
+use wp_knowledge::cache::FieldQueryCache;
 use wp_model_core::model::{DataField, DataRecord};
 
 // 说明：原实现通过构建 HashMap<name, DataRecord> 聚合每个 sink 的待投递数据，

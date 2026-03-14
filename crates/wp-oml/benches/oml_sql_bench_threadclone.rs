@@ -6,8 +6,7 @@ use orion_variate::EnvDict;
 use std::fs;
 use std::hint::black_box;
 use std::path::PathBuf;
-use wp_config::test_support::ForTest;
-use wp_data_model::cache::FieldQueryCache;
+use wp_knowledge::cache::FieldQueryCache;
 use wp_knowledge::facade as kdb;
 use wp_model_core::model::{DataField, DataRecord, FieldStorage};
 use wp_primitives::Parser;
@@ -59,15 +58,12 @@ max = 100
 enabled = true
 "#;
         fs::write(root.join("conf/knowdb.toml"), conf_toml).unwrap();
-        // 写 example SQL 与 CSV（复用 wp-knowledge 的样例 CSV）
+        // 写 example SQL 与 CSV（复用 wp-oml 自带样例 CSV）
         let create_sql = "CREATE TABLE IF NOT EXISTS {table} (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL,\n  pinying TEXT NOT NULL\n);\n";
         let insert_sql = "INSERT INTO {table} (name, pinying) VALUES (?1, ?2);\n";
         fs::write(root.join("models/knowledge/example/create.sql"), create_sql).unwrap();
         fs::write(root.join("models/knowledge/example/insert.sql"), insert_sql).unwrap();
-        let csv_src = format!(
-            "{}/../wp-knowledge/src/mem/dict/example.csv",
-            env!("CARGO_MANIFEST_DIR")
-        );
+        let csv_src = format!("{}/tests/example.csv", env!("CARGO_MANIFEST_DIR"));
         fs::copy(csv_src, root.join("models/knowledge/example/data.csv")).unwrap();
 
         // 转为绝对路径，避免 init_thread_cloned_from_knowdb 内部再次 join root
@@ -77,7 +73,12 @@ enabled = true
             "file:{}/wp_bench_authority.sqlite?mode=rwc&uri=true",
             root.display()
         );
-        kdb::init_thread_cloned_from_knowdb(&root, &root.join("conf/knowdb.toml"), &auth_uri, &EnvDict::test_default())
+        kdb::init_thread_cloned_from_knowdb(
+            &root,
+            &root.join("conf/knowdb.toml"),
+            &auth_uri,
+            &EnvDict::default(),
+        )
             .expect("init thread-cloned provider");
     });
 }

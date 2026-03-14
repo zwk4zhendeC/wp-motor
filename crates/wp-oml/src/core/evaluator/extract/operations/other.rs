@@ -2,7 +2,7 @@ use crate::core::evaluator::transform::omlobj_meta_conv;
 use crate::core::prelude::*;
 use crate::language::GenericAccessor;
 use crate::language::{GenericBinding, NestedBinding, SingleEvalExp};
-use wp_data_model::cache::FieldQueryCache;
+use wp_knowledge::cache::FieldQueryCache;
 use wp_model_core::model::{DataField, DataRecord, DataType, FieldStorage};
 
 use crate::core::FieldExtractor;

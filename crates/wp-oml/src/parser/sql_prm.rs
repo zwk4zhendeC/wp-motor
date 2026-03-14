@@ -252,7 +252,7 @@ pub fn oml_aga_sql(data: &mut &str) -> WResult<PreciseEvaluator> {
 }
 #[cfg(test)]
 mod tests {
-    use wp_data_model::cache::FieldQueryCache;
+    use wp_knowledge::cache::FieldQueryCache;
     use wp_model_core::model::{DataField, DataRecord, FieldStorage};
     use wp_primitives::WResult as ModalResult;
 

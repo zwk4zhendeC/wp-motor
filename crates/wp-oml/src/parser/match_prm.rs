@@ -538,7 +538,7 @@ A = match read(field) {
     fn test_match_function_execution() {
         use crate::core::DataTransformer;
         use crate::parser::oml_parse_raw;
-        use wp_data_model::cache::FieldQueryCache;
+        use wp_knowledge::cache::FieldQueryCache;
         use wp_model_core::model::{DataField, DataRecord};
 
         // Test starts_with
@@ -774,7 +774,7 @@ Result = match read(status) {
     fn test_match_with_quoted_strings() {
         use crate::core::DataTransformer;
         use orion_error::TestAssert;
-        use wp_data_model::cache::FieldQueryCache;
+        use wp_knowledge::cache::FieldQueryCache;
         use wp_model_core::model::DataRecord;
 
         // Test match with quoted strings in results
@@ -1155,7 +1155,7 @@ A = match (read(f1), read(f2), read(f3), read(f4)) {
     fn test_match_triple_execution() {
         use crate::core::DataTransformer;
         use crate::parser::oml_parse_raw;
-        use wp_data_model::cache::FieldQueryCache;
+        use wp_knowledge::cache::FieldQueryCache;
         use wp_model_core::model::DataRecord;
 
         let cache = &mut FieldQueryCache::default();
@@ -1198,7 +1198,7 @@ Result = match (read(city), read(level), read(zone)) {
     fn test_match_quadruple_execution() {
         use crate::core::DataTransformer;
         use crate::parser::oml_parse_raw;
-        use wp_data_model::cache::FieldQueryCache;
+        use wp_knowledge::cache::FieldQueryCache;
         use wp_model_core::model::DataRecord;
 
         let cache = &mut FieldQueryCache::default();
@@ -1307,7 +1307,7 @@ Result = match (read(a), read(b), read(c), read(d)) {
     fn test_or_single_source_execution() {
         use crate::core::DataTransformer;
         use crate::parser::oml_parse_raw;
-        use wp_data_model::cache::FieldQueryCache;
+        use wp_knowledge::cache::FieldQueryCache;
         use wp_model_core::model::DataRecord;
 
         let cache = &mut FieldQueryCache::default();
@@ -1369,7 +1369,7 @@ Result = match read(city) {
     fn test_or_multi_source_execution() {
         use crate::core::DataTransformer;
         use crate::parser::oml_parse_raw;
-        use wp_data_model::cache::FieldQueryCache;
+        use wp_knowledge::cache::FieldQueryCache;
         use wp_model_core::model::DataRecord;
 
         let cache = &mut FieldQueryCache::default();

@@ -5,7 +5,7 @@ use crate::runtime::prelude::*;
 use tokio::time::MissedTickBehavior;
 use tokio::time::interval;
 use wp_connector_api::AsyncCtrl;
-use wp_data_model::cache::FieldQueryCache;
+use wp_knowledge::cache::FieldQueryCache;
 
 use crate::orchestrator::config::build_sinks::{SinkRouteTable, build_sink_target};
 use crate::runtime::actor::command::{ActorCtrlCmd, TaskScope};

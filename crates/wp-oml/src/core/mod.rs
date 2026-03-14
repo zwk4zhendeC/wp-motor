@@ -16,7 +16,7 @@ pub use evaluator::traits::BatchFetcher;
 pub use evaluator::traits::ExpEvaluator;
 pub use evaluator::traits::FieldCollector;
 pub use evaluator::traits::ValueProcessor;
-use wp_data_model::cache::FieldQueryCache;
+use wp_knowledge::cache::FieldQueryCache;
 use wp_model_core::model::{DataField, DataRecord, FieldStorage};
 
 pub trait FieldExtractor {

@@ -516,7 +516,7 @@ mod tests {
     #[test]
     fn test_kvarr_bracket_keys() -> AnyResult<()> {
         let conf = WplField::try_parse("kvarr\\,").assert();
-        let mut data = "fn(arg)=\"hello\", list<int>=100, arr[0]=true";
+        let mut data = "fn(arg)=\"hello\", list<int>=100, arr[0]=true, set{a}=value";
         let parser = ParserTUnit::new(KvArrP::default(), conf);
         let fields = parser.verify_parse_suc(&mut data).assert();
         let record = DataRecord::from(fields);
@@ -531,6 +531,54 @@ mod tests {
         assert_eq!(
             record.field("arr[0]").map(|s| s.as_field()),
             Some(&DataField::from_bool("arr[0]", true))
+        );
+        assert_eq!(
+            record.field("set{a}").map(|s| s.as_field()),
+            Some(&DataField::from_chars("set{a}", "value"))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_kvarr_bracket_keys_with_sub_fields() -> AnyResult<()> {
+        let conf =
+            WplField::try_parse("kvarr(bool@arr[0], digit@list<int>, chars@set{a})\\,").assert();
+        let mut data = "arr[0]=true, list<int>=100, set{a}=value";
+        let parser = ParserTUnit::new(KvArrP::default(), conf);
+        let fields = parser.verify_parse_suc(&mut data).assert();
+        let record = DataRecord::from(fields);
+        assert_eq!(
+            record.field("arr[0]").map(|s| s.as_field()),
+            Some(&DataField::from_bool("arr[0]", true))
+        );
+        assert_eq!(
+            record.field("list<int>").map(|s| s.as_field()),
+            Some(&DataField::from_digit("list<int>", 100))
+        );
+        assert_eq!(
+            record.field("set{a}").map(|s| s.as_field()),
+            Some(&DataField::from_chars("set{a}", "value"))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_kvarr_runtime_keys_with_brackets_angles_braces() -> AnyResult<()> {
+        let rule = r#"rule test { (kvarr\,) }"#;
+        let data = r#"arr[0]=true, list<int>=100, set{a}=value"#;
+        let pipe = WplEvaluator::from_code(rule)?;
+        let (record, _) = pipe.proc(0, data, 0)?;
+        assert_eq!(
+            record.field("arr[0]").map(|s| s.as_field()),
+            Some(&DataField::from_bool("arr[0]", true))
+        );
+        assert_eq!(
+            record.field("list<int>").map(|s| s.as_field()),
+            Some(&DataField::from_digit("list<int>", 100))
+        );
+        assert_eq!(
+            record.field("set{a}").map(|s| s.as_field()),
+            Some(&DataField::from_chars("set{a}", "value"))
         );
         Ok(())
     }

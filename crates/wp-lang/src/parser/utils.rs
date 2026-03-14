@@ -12,17 +12,39 @@ use wp_parser::symbol::ctx_desc;
 
 //#[allow(clippy::nonminimal_bool)]
 pub fn take_ref_path<'a>(input: &mut &'a str) -> WResult<&'a str> {
-    take_while(1.., |c: char| {
-        c.is_alphanumeric()
-            || c == '_'
-            || c == '/'
-            || c == '-'
-            || c == '.'
-            || c == '['
-            || c == ']'
-            || c == '*'
-    })
-    .parse_next(input)
+    let s = *input;
+    let mut end = 0usize;
+    let mut paren_depth = 0usize;
+
+    for (idx, ch) in s.char_indices() {
+        if ch == ')' && paren_depth == 0 {
+            break;
+        }
+
+        let allowed = ch.is_alphanumeric()
+            || matches!(
+                ch,
+                '_' | '/' | '-' | '.' | '[' | ']' | '(' | ')' | '<' | '>' | '{' | '}' | '*'
+            );
+        if !allowed {
+            break;
+        }
+
+        match ch {
+            '(' => paren_depth += 1,
+            ')' => paren_depth = paren_depth.saturating_sub(1),
+            _ => {}
+        }
+        end = idx + ch.len_utf8();
+    }
+
+    if end == 0 {
+        return fail.context(ctx_desc("<ref_path>")).parse_next(input);
+    }
+
+    let (head, tail) = s.split_at(end);
+    *input = tail;
+    Ok(head)
 }
 
 /// Parse field reference path: supports either bare identifiers or single-quoted strings
@@ -715,6 +737,23 @@ mod tests {
         assert_eq!(
             take_ref_path_or_quoted.parse_peek("process/path[0]"),
             Ok(("", "process/path[0]".to_string()))
+        );
+        assert_eq!(
+            take_ref_path_or_quoted.parse_peek("list<int>"),
+            Ok(("", "list<int>".to_string()))
+        );
+        assert_eq!(
+            take_ref_path_or_quoted.parse_peek("set{a}"),
+            Ok(("", "set{a}".to_string()))
+        );
+
+        assert_eq!(
+            take_ref_path_or_quoted.parse_peek("protocal(80)"),
+            Ok(("", "protocal(80)".to_string()))
+        );
+        assert_eq!(
+            take_ref_path_or_quoted.parse_peek("protocal(80))"),
+            Ok((")", "protocal(80)".to_string()))
         );
 
         // Test single quotes are raw strings - \n, \t are literal

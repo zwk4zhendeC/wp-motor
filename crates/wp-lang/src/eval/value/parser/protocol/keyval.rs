@@ -156,6 +156,18 @@ mod tests {
             }),]
         );
 
+        let mut data = r#"protocal(80)="tcp""#;
+        let conf = WplField::try_parse(r#"kv(@protocal(80))"#).assert();
+        let field = ParserTUnit::new(KeyValP::default(), conf)
+            .verify_parse_suc_end_meta(&mut data, DataType::Chars);
+        assert_eq!(
+            field,
+            vec![DataField::from_chars(
+                "protocal(80)".to_string(),
+                "tcp".to_string()
+            )]
+        );
+
         Ok(())
     }
     #[test]
@@ -358,6 +370,41 @@ mod tests {
     }
 
     #[test]
+    fn test_kv_runtime_key_with_parentheses() -> AnyResult<()> {
+        let rule = r#"rule test { (kv(@protocal(80))) }"#;
+        let data = r#"protocal(80)=tcp"#;
+        let pipe = WplEvaluator::from_code(rule)?;
+        let (record, _) = pipe.proc(0, RawData::from_string(data.to_string()), 0)?;
+        assert_eq!(
+            record.field("protocal(80)").map(|s| s.as_field()),
+            Some(&DataField::from_chars("protocal(80)", "tcp"))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_kv_runtime_keys_with_brackets_angles_braces() -> AnyResult<()> {
+        let rule = r#"rule test { (kv,kv,kv)\s }"#;
+        let data = r#"arr[0]=true list<int>=100 set{a}=value"#;
+        let pipe = WplEvaluator::from_code(rule)?;
+        let (record, _) = pipe.proc(0, RawData::from_string(data.to_string()), 0)?;
+
+        assert_eq!(
+            record.field("arr[0]").map(|s| s.as_field()),
+            Some(&DataField::from_chars("arr[0]", "true"))
+        );
+        assert_eq!(
+            record.field("list<int>").map(|s| s.as_field()),
+            Some(&DataField::from_chars("list<int>", "100"))
+        );
+        assert_eq!(
+            record.field("set{a}").map(|s| s.as_field()),
+            Some(&DataField::from_chars("set{a}", "value"))
+        );
+        Ok(())
+    }
+
+    #[test]
     fn test_kv_multi_keys() -> AnyResult<()> {
         let rule = r#" rule x { (kv,kv(digit),kv(digit@x.c, digit@x.c1:x.c))\!\|} "#;
         let data = r#"x.a="hello"!|x.b=18!|x.c=20"#;
@@ -402,6 +449,12 @@ mod tests {
         let field = ParserTUnit::new(KeyValP::default(), conf)
             .verify_parse_suc_meta(&mut data, DataType::Chars);
         assert_eq!(field[0], DataField::from_chars("set{a}", "value"));
+
+        let mut data = r#"arr[0]=ok"#;
+        let conf = WplField::try_parse(r#"kv"#).assert();
+        let field = ParserTUnit::new(KeyValP::default(), conf)
+            .verify_parse_suc_meta(&mut data, DataType::Chars);
+        assert_eq!(field[0], DataField::from_chars("arr[0]", "ok"));
 
         Ok(())
     }

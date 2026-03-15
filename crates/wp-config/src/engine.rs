@@ -39,12 +39,15 @@ pub struct ModelsConf {
     pub wpl: String,
     #[serde(default = "default_oml_root")]
     pub oml: String,
+    #[serde(default = "default_knowledge_root")]
+    pub knowledge: String,
 }
 
 impl EnvEvaluable<ModelsConf> for ModelsConf {
     fn env_eval(mut self, dict: &orion_variate::EnvDict) -> ModelsConf {
         self.wpl = self.wpl.env_eval(dict);
         self.oml = self.oml.env_eval(dict);
+        self.knowledge = self.knowledge.env_eval(dict);
         self
     }
 }
@@ -143,6 +146,10 @@ pub fn default_oml_root() -> String {
     "./models/oml".to_string()
 }
 
+pub fn default_knowledge_root() -> String {
+    "./models/knowledge".to_string()
+}
+
 pub fn default_sinks_root() -> String {
     "./topology/sinks".to_string()
 }
@@ -170,6 +177,7 @@ pub fn default_models_conf() -> ModelsConf {
     ModelsConf {
         wpl: default_wpl_root(),
         oml: default_oml_root(),
+        knowledge: default_knowledge_root(),
     }
 }
 
@@ -201,6 +209,7 @@ impl EngineConfig {
             models: ModelsConf {
                 wpl: default_wpl_root(),
                 oml: default_oml_root(),
+                knowledge: default_knowledge_root(),
                 // Use pluralized roots for sources/sinks; legacy single forms are no longer default
             },
             topology: TopologyConf {
@@ -235,6 +244,10 @@ impl EngineConfig {
 
     pub fn oml_root(&self) -> &str {
         self.models.oml.as_str()
+    }
+
+    pub fn knowledge_root(&self) -> &str {
+        self.models.knowledge.as_str()
     }
 
     pub fn sinks_root(&self) -> &str {
@@ -290,6 +303,7 @@ impl EngineConfig {
         let abs_work_root = work_root.as_ref();
         self.models.wpl = resolve_engine_path(self.models.wpl.as_str(), abs_work_root);
         self.models.oml = resolve_engine_path(self.models.oml.as_str(), abs_work_root);
+        self.models.knowledge = resolve_engine_path(self.models.knowledge.as_str(), abs_work_root);
         self.topology.sources = resolve_engine_path(self.topology.sources.as_str(), abs_work_root);
         self.topology.sinks = resolve_engine_path(self.topology.sinks.as_str(), abs_work_root);
         self.rescue.path = resolve_engine_path(self.rescue.path.as_str(), abs_work_root);
@@ -449,5 +463,30 @@ mod tests {
         )
         .expect("parse config with semantic.enable");
         assert!(conf.semantic().enabled);
+    }
+
+    #[test]
+    fn test_models_conf_accepts_knowledge_root() {
+        let conf: EngineConfig = toml::from_str(
+            r#"
+            [models]
+            knowledge = "${CASE_PATH}/models/knowledge"
+            "#,
+        )
+        .expect("parse config with models.knowledge");
+        assert_eq!(conf.knowledge_root(), "${CASE_PATH}/models/knowledge");
+    }
+
+    #[test]
+    fn test_conf_absolutize_resolves_knowledge_root() {
+        let conf: EngineConfig = toml::from_str::<EngineConfig>(
+            r#"
+            [models]
+            knowledge = "./custom/knowledge"
+            "#,
+        )
+        .expect("parse config with relative knowledge root")
+        .conf_absolutize("/work");
+        assert_eq!(conf.knowledge_root(), "/work/custom/knowledge");
     }
 }

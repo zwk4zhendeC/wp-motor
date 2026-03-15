@@ -31,6 +31,7 @@ use crate::orchestrator::engine::service::{
     EngineRuntime, start_processing_tasks, start_warp_service,
 };
 use crate::resources::core::manager::ResManager;
+use crate::runtime::actor::constants::ACTOR_CMD_POLL_TIMEOUT_MS;
 use crate::runtime::actor::exit_policy::ExitAction;
 use crate::runtime::actor::exit_policy::ExitPhase;
 use crate::runtime::actor::{self, ExitPolicyKind};
@@ -46,6 +47,19 @@ use wp_ctrl_api::CommandType;
 const P0_RELOAD_DRAIN_TIMEOUT: Duration = Duration::from_millis(300);
 #[cfg(not(test))]
 const P0_RELOAD_DRAIN_TIMEOUT: Duration = Duration::from_secs(10);
+
+fn semantic_dict_config_path(main_conf: &EngineConfig, work_root: &Path) -> PathBuf {
+    let primary = PathBuf::from(main_conf.knowledge_root()).join("semantic_dict.toml");
+    if primary.exists() {
+        return primary;
+    }
+
+    work_root.join("knowledge/semantic_dict.toml")
+}
+
+fn knowdb_config_path(main_conf: &EngineConfig) -> PathBuf {
+    PathBuf::from(main_conf.knowledge_root()).join("knowdb.toml")
+}
 
 /// wparse 应用入口：对外隐藏内部装配细节
 pub struct WpApp {
@@ -128,14 +142,7 @@ impl WpApp {
         );
         let work_root_str = self.conf_manager.work_root_path();
         let work_root = Path::new(work_root_str.as_str());
-        let semantic_dict_path = {
-            let primary = work_root.join("models/knowledge/semantic_dict.toml");
-            if primary.exists() {
-                primary
-            } else {
-                work_root.join("knowledge/semantic_dict.toml")
-            }
-        };
+        let semantic_dict_path = semantic_dict_config_path(&self.main_conf, work_root);
         oml::set_semantic_dict_config_path(Some(semantic_dict_path));
         match oml::check_semantic_dict_config(None) {
             Ok(Some(msg)) => info_ctrl!("semantic dict: {}", msg),
@@ -290,7 +297,43 @@ impl WpApp {
             }
         } else {
             self.control_handle.deactivate();
-            task_admin.shutdown(exit_policy).await?;
+            let mut exit_phase = ExitPhase::Running;
+            let mut phase_started_at = Instant::now();
+            loop {
+                let stop = if let Ok(Some(_)) = timeout(
+                    Duration::from_millis(ACTOR_CMD_POLL_TIMEOUT_MS),
+                    signals.next(),
+                )
+                .await
+                {
+                    info_ctrl!("recv signal, stop all routine!");
+                    true
+                } else {
+                    false
+                };
+                let action = task_admin.task_manager_mut().next_exit_policy_action(
+                    exit_policy,
+                    exit_phase,
+                    phase_started_at,
+                    stop,
+                )?;
+                if matches!(action, ExitAction::EnterQuiescing(_)) {
+                    task_admin.disconnect_parse_router();
+                }
+                if task_admin
+                    .task_manager_mut()
+                    .apply_exit_policy_action(
+                        exit_policy,
+                        &mut exit_phase,
+                        &mut phase_started_at,
+                        action,
+                        None,
+                    )
+                    .await?
+                {
+                    break;
+                }
+            }
         }
         Ok(())
     }
@@ -317,8 +360,7 @@ async fn load_engine_res(
     env_dict: &EnvDict,
 ) -> RunResult<EngineResource> {
     let mut ctx = OperationContext::want("load-engine-res").with_auto_log();
-    let knowdb_path =
-        Path::new(conf_manager.work_root_path().as_str()).join("models/knowledge/knowdb.toml");
+    let knowdb_path = knowdb_config_path(main_conf);
     let mut knowdb_handler = None;
     if knowdb_path.exists() {
         let auth_file = PathBuf::from(conf_manager.runtime_path("authority.sqlite"));
@@ -346,8 +388,8 @@ async fn load_engine_res(
         }
     } else {
         warn_ctrl!(
-            "models/knowledge/knowdb.toml not found under {}; skip knowdb init",
-            conf_manager.work_root_path()
+            "knowdb config not found at {}; skip knowdb init",
+            knowdb_path.display()
         );
     }
 
@@ -436,8 +478,7 @@ async fn load_processing_res(
     env_dict: &EnvDict,
 ) -> RunResult<EngineResource> {
     let mut ctx = OperationContext::want("load-processing-res").with_auto_log();
-    let knowdb_path =
-        Path::new(conf_manager.work_root_path().as_str()).join("models/knowledge/knowdb.toml");
+    let knowdb_path = knowdb_config_path(main_conf);
     let mut knowdb_handler = None;
     if knowdb_path.exists() {
         let auth_file = PathBuf::from(conf_manager.runtime_path("authority.sqlite"));
@@ -465,8 +506,8 @@ async fn load_processing_res(
         }
     } else {
         warn_ctrl!(
-            "models/knowledge/knowdb.toml not found under {}; skip knowdb init",
-            conf_manager.work_root_path()
+            "knowdb config not found at {}; skip knowdb init",
+            knowdb_path.display()
         );
     }
 

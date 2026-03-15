@@ -6,7 +6,7 @@ The semantic dictionary system provides semantic support for log parsing, includ
 - **Built-in System Dictionary**: Code-embedded, covering common vocabulary for log analysis
 - **External Configuration Support**: Optional, supports adding or replacing the built-in dictionary
 
-**Configuration File Location**: `models/knowledge/semantic_dict.toml` (knowledge configuration directory)
+**Configuration File Location**: `${models.knowledge}/semantic_dict.toml` (knowledge configuration directory, default `models/knowledge/semantic_dict.toml`)
 
 ## Built-in System Dictionary
 
@@ -52,8 +52,8 @@ All dictionaries are built into the code (`semantic_dict_loader.rs`), including:
 ### Configuration Method
 
 The loader checks these paths by default (in order):
-- `models/knowledge/semantic_dict.toml`
-- `knowledge/semantic_dict.toml`
+- `${models.knowledge}/semantic_dict.toml`
+- `knowledge/semantic_dict.toml` (legacy compatibility)
 
 No environment variable is required.
 
@@ -148,7 +148,7 @@ chinese = ["迁移任务", "通知"]
 
 ### Example 1: Extend Built-in Dictionary (ADD Mode)
 
-File: `models/knowledge/semantic_dict.toml`
+File: `${models.knowledge}/semantic_dict.toml`
 
 ```toml
 version = 1
@@ -244,7 +244,7 @@ chinese = ["自定义状态1"]
 Include configuration file in version control:
 
 ```bash
-git add models/knowledge/semantic_dict.toml
+git add ${models.knowledge}/semantic_dict.toml
 git commit -m "Add custom semantic dictionary for production"
 ```
 
@@ -254,10 +254,10 @@ Use different files per environment, then copy to the default path before startu
 
 ```bash
 # Development environment
-cp models/knowledge/dev_semantic_dict.toml models/knowledge/semantic_dict.toml
+cp ${models.knowledge}/dev_semantic_dict.toml ${models.knowledge}/semantic_dict.toml
 
 # Production environment
-cp models/knowledge/prod_semantic_dict.toml models/knowledge/semantic_dict.toml
+cp ${models.knowledge}/prod_semantic_dict.toml ${models.knowledge}/semantic_dict.toml
 ```
 
 ### 4. Configuration Validation
@@ -287,13 +287,13 @@ Warning: Failed to load external semantic dict config: <error message>.
 **Solutions:**
 ```bash
 # Check if file exists
-ls -l models/knowledge/semantic_dict.toml
+ls -l ${models.knowledge}/semantic_dict.toml
 
 # Verify TOML format
-cat models/knowledge/semantic_dict.toml
+cat ${models.knowledge}/semantic_dict.toml
 
 # Check version number
-grep "version" models/knowledge/semantic_dict.toml
+grep "version" ${models.knowledge}/semantic_dict.toml
 ```
 
 ### Vocabulary Not Taking Effect
@@ -301,7 +301,7 @@ grep "version" models/knowledge/semantic_dict.toml
 **Troubleshooting Steps:**
 
 1. Confirm default config exists and is enabled:
-   `enabled = true` in `models/knowledge/semantic_dict.toml`
+   `enabled = true` in `${models.knowledge}/semantic_dict.toml`
 
 2. Confirm correct mode:
    - ADD mode: New vocabulary should **add** to built-in dictionary

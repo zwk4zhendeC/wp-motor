@@ -59,6 +59,10 @@ pub fn err4_dispatch_data(err: &SourceError, mode: &RobustnessMode) -> ErrorHand
 
 fn universal_proc_stg(mode: &RobustnessMode, e: &UvsReason) -> ErrorHandlingStrategy {
     match e {
+        UvsReason::ValidationError => {
+            error_data!("validation error");
+            ErrorHandlingStrategy::Throw
+        }
         UvsReason::LogicError => match mode {
             RobustnessMode::Strict => {
                 error_data!("logic error");
@@ -78,12 +82,49 @@ fn universal_proc_stg(mode: &RobustnessMode, e: &UvsReason) -> ErrorHandlingStra
             warn_data!("biz error");
             ErrorHandlingStrategy::Tolerant
         }
+        UvsReason::RunRuleError => {
+            warn_data!("run rule error");
+            ErrorHandlingStrategy::Throw
+        }
+        UvsReason::NotFoundError => {
+            error_data!("not found error");
+            ErrorHandlingStrategy::Throw
+        }
+        UvsReason::PermissionError => {
+            error_data!("permission error");
+            ErrorHandlingStrategy::Throw
+        }
+        UvsReason::NetworkError => {
+            warn_data!("network error");
+            ErrorHandlingStrategy::Throw
+        }
+        UvsReason::ResourceError => {
+            error_data!("resource error");
+            ErrorHandlingStrategy::Throw
+        }
+        UvsReason::TimeoutError => {
+            warn_data!("timeout error");
+            ErrorHandlingStrategy::Throw
+        }
         UvsReason::ConfigError(e) => {
             error_data!("conf error: {}", e);
             ErrorHandlingStrategy::Throw
         }
-        _ => {
-            unimplemented!("robust error: {}", e)
+        UvsReason::ExternalError => {
+            error_data!("external error");
+            ErrorHandlingStrategy::Throw
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resource_error_does_not_panic_and_throws() {
+        let err = SourceError::from(SourceReason::Uvs(UvsReason::ResourceError));
+        let stg = err4_dispatch_data(&err, &RobustnessMode::Debug);
+        assert!(matches!(stg, ErrorHandlingStrategy::Throw));
     }
 }

@@ -50,10 +50,10 @@ impl WpRescueApp {
 
     /// 执行 batch 模式救援流程
     pub async fn run_batch(&mut self) -> RunResult<()> {
-        // 知识库（V2，可选）：检测 ./models/knowledge/knowdb.toml
+        // 知识库（V2，可选）：检测 [models].knowledge/knowdb.toml
         let mut knowdb_handler = None;
-        let knowdb_path = std::path::Path::new(self.conf_manager.work_root_path().as_str())
-            .join("models/knowledge/knowdb.toml");
+        let knowdb_path =
+            std::path::PathBuf::from(self.main_conf.knowledge_root()).join("knowdb.toml");
         if knowdb_path.exists() {
             let auth_file =
                 std::path::PathBuf::from(self.conf_manager.runtime_path("authority.sqlite"));
@@ -86,8 +86,8 @@ impl WpRescueApp {
             }
         } else {
             warn_ctrl!(
-                "rescue mode: models/knowledge/knowdb.toml not found under {}; skip knowdb init",
-                self.conf_manager.work_root_path()
+                "rescue mode: knowdb config not found at {}; skip knowdb init",
+                knowdb_path.display()
             );
         }
 

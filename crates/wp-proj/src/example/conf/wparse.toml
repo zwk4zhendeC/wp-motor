@@ -4,6 +4,7 @@ robust = "normal"
 [models]
 wpl = "./models/wpl"
 oml = "./models/oml"
+knowledge = "./models/knowledge"
 
 [topology]
 sources = "./topology/sources"

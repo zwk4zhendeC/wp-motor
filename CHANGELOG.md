@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Reload Runtime**: Return structured reload outcomes (`done`, `done_with_force_replace`, `failed`) from `wp-motor` so `warp-parse` can map results to admin HTTP responses
 - **Daemon Lifecycle**: Reconnect daemon command handling with the existing exit-policy state machine to preserve quiescing/stopping behavior while runtime commands are enabled
 - **Control Readiness**: Reject runtime commands before the daemon loop is ready, and stop accepting new commands as soon as shutdown or quiescing begins
+- **Config/Knowledge**: Add `[models].knowledge` as the configurable root for knowdb and semantic dictionary files, while keeping the legacy `knowledge/semantic_dict.toml` fallback for semantic dict loading
 - **Documentation**: Clarify the remote reload boundary so admin HTTP lives in `warp-parse`, while `wp-motor` only owns runtime command execution and status reporting
 - **Dependencies/Knowledge**: Switch workspace consumers to external `wp-knowledge 0.10`, remove the local `crates/wp-knowledge` mirror, and align OML/routing cache usage with the external crate types
 - **Dependencies/Language**: Record `wp-lang` as an externalized dependency track instead of continuing to maintain a local in-workspace mirror

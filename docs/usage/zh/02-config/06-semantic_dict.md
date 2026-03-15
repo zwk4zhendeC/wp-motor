@@ -6,7 +6,7 @@
 - **系统内置词典**：代码内置，涵盖日志分析的常用词汇
 - **外部配置支持**：可选，支持添加或替换内置词典
 
-**配置文件位置**：`models/knowledge/semantic_dict.toml`（知识配置目录）
+**配置文件位置**：`${models.knowledge}/semantic_dict.toml`（知识配置目录，默认 `models/knowledge/semantic_dict.toml`）
 
 ## 系统内置词典
 
@@ -52,8 +52,8 @@
 ### 配置方式
 
 默认读取以下路径（按顺序）：
-- `models/knowledge/semantic_dict.toml`
-- `knowledge/semantic_dict.toml`
+- `${models.knowledge}/semantic_dict.toml`
+- `knowledge/semantic_dict.toml`（兼容旧布局）
 
 无需设置环境变量。
 
@@ -148,7 +148,7 @@ chinese = ["迁移任务", "通知"]
 
 ### 示例 1：扩展内置词典（ADD 模式）
 
-文件：`models/knowledge/semantic_dict.toml`
+文件：`${models.knowledge}/semantic_dict.toml`
 
 ```toml
 version = 1
@@ -244,7 +244,7 @@ chinese = ["自定义状态1"]
 将配置文件纳入版本控制：
 
 ```bash
-git add models/knowledge/semantic_dict.toml
+git add ${models.knowledge}/semantic_dict.toml
 git commit -m "Add custom semantic dictionary for production"
 ```
 
@@ -254,10 +254,10 @@ git commit -m "Add custom semantic dictionary for production"
 
 ```bash
 # 开发环境
-cp models/knowledge/dev_semantic_dict.toml models/knowledge/semantic_dict.toml
+cp ${models.knowledge}/dev_semantic_dict.toml ${models.knowledge}/semantic_dict.toml
 
 # 生产环境
-cp models/knowledge/prod_semantic_dict.toml models/knowledge/semantic_dict.toml
+cp ${models.knowledge}/prod_semantic_dict.toml ${models.knowledge}/semantic_dict.toml
 ```
 
 ### 4. 配置验证
@@ -287,13 +287,13 @@ Warning: Failed to load external semantic dict config: <error message>.
 **解决方法：**
 ```bash
 # 检查文件是否存在
-ls -l models/knowledge/semantic_dict.toml
+ls -l ${models.knowledge}/semantic_dict.toml
 
 # 验证 TOML 格式
-cat models/knowledge/semantic_dict.toml
+cat ${models.knowledge}/semantic_dict.toml
 
 # 检查版本号
-grep "version" models/knowledge/semantic_dict.toml
+grep "version" ${models.knowledge}/semantic_dict.toml
 ```
 
 ### 词汇未生效
@@ -301,7 +301,7 @@ grep "version" models/knowledge/semantic_dict.toml
 **检查步骤：**
 
 1. 确认默认路径配置存在且已启用：
-   `models/knowledge/semantic_dict.toml` 中 `enabled = true`
+   `${models.knowledge}/semantic_dict.toml` 中 `enabled = true`
 
 2. 确认模式正确：
    - ADD 模式：新词汇应该**添加**到内置词典

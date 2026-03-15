@@ -198,7 +198,7 @@ fn evaluate_target(
     }
 
     if comps.semantic_dict {
-        row.semantic_dict = match check_semantic_dict_config(Path::new(wrs)) {
+        row.semantic_dict = match check_semantic_dict_config(Path::new(wrs), dict) {
             Ok(Some(msg)) => Cell::success_with_message(msg),
             Ok(None) => Cell::success_with_message("使用内置词典".to_string()),
             Err(e) => Cell::failure(e),
@@ -214,8 +214,11 @@ fn evaluate_target(
 }
 
 /// 检查语义词典配置
-fn check_semantic_dict_config(work_root: &Path) -> Result<Option<String>, String> {
-    let primary = work_root.join("models/knowledge/semantic_dict.toml");
+fn check_semantic_dict_config(work_root: &Path, dict: &EnvDict) -> Result<Option<String>, String> {
+    let (_, main_conf) = cfg_face::load_warp_engine_confs(&work_root.to_string_lossy(), dict)
+        .map_err(|e| e.reason().to_string())?;
+
+    let primary = PathBuf::from(main_conf.knowledge_root()).join("semantic_dict.toml");
     if primary.exists() {
         return oml::check_semantic_dict_config(Some(&primary));
     }

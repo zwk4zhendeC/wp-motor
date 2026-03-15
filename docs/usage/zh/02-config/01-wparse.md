@@ -8,6 +8,7 @@ robust  = "normal"           # debug|normal|strict
 [models]
 wpl     = "./models/wpl"
 oml     = "./models/oml"
+knowledge = "./models/knowledge"
 
 [topology]
 sources = "./topology/sources"
@@ -41,3 +42,8 @@ target = "*"
 key    = "sink_stat"
 target = "*"
 ```
+
+说明：
+- `[models].knowledge` 是知识配置根目录，默认值为 `./models/knowledge`
+- `semantic_dict.toml` 默认读取 `${models.knowledge}/semantic_dict.toml`
+- `knowdb.toml` 默认读取 `${models.knowledge}/knowdb.toml`

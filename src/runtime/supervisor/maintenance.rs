@@ -1,3 +1,4 @@
+use crate::runtime::actor::constants::ACTOR_CMD_POLL_TIMEOUT_MS;
 use wp_connector_api::AsyncCtrl;
 
 use std::time::Duration;
@@ -29,8 +30,11 @@ impl ActMaintainer {
         let mut run_ctrl = TaskController::new("maintainer", self.cmd_r.clone(), None);
         loop {
             for (bad_sink_r, fix_sink_s, bad_sink_s) in self.keep_item.iter_mut() {
-                if let Ok(Some(mut data)) =
-                    timeout(Duration::from_millis(100), bad_sink_r.recv()).await
+                if let Ok(Some(mut data)) = timeout(
+                    Duration::from_millis(ACTOR_CMD_POLL_TIMEOUT_MS),
+                    bad_sink_r.recv(),
+                )
+                .await
                 {
                     let result = data.sink.reconnect().await;
                     match result {

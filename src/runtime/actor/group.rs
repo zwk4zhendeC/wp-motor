@@ -89,10 +89,6 @@ impl TaskGroup {
         while let Some(h) = self.handles.pop() {
             if !h.is_finished() {
                 info_ctrl!("{} group routines [{}] wait... ", self.name, index);
-                #[cfg(debug_assertions)]
-                {
-                    sleep(Duration::from_secs(1)).await;
-                }
                 h.await.owe_sys().with(&ctx)?;
             }
             debug_ctrl!("{} group routines[{}] finished end", self.name, index);

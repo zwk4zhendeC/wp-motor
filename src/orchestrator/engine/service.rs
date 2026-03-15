@@ -151,9 +151,6 @@ impl EngineRuntime {
         mut self,
         policy_kind: crate::runtime::actor::ExitPolicyKind,
     ) -> RunResult<()> {
-        if matches!(policy_kind, crate::runtime::actor::ExitPolicyKind::Batch) {
-            self.disconnect_parse_router();
-        }
         self.task_manager.all_down_wait_policy(policy_kind).await
     }
 
@@ -162,9 +159,6 @@ impl EngineRuntime {
         policy_kind: crate::runtime::actor::ExitPolicyKind,
         initial_signal_received: bool,
     ) -> RunResult<()> {
-        if matches!(policy_kind, crate::runtime::actor::ExitPolicyKind::Batch) {
-            self.disconnect_parse_router();
-        }
         self.task_manager
             .all_down_wait_policy_with_signal(policy_kind, initial_signal_received)
             .await
@@ -496,7 +490,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn batch_shutdown_disconnects_parse_router_before_waiting_for_parser() {
+    async fn batch_disconnects_parse_router_only_after_entering_quiescing() {
         let (mon_tx, _mon_rx) = mpsc::channel(8);
 
         let (parser_group, parser_sender) = make_parser_group("batch-parser", None);
@@ -515,7 +509,6 @@ mod tests {
             .append_group_with_role(TaskRole::Picker, make_auto_finish_group("batch-picker", 20));
 
         let mut runtime = EngineRuntime::new(task_manager, parse_router, mon_tx);
-        runtime.disconnect_parse_router();
         tokio::time::sleep(Duration::from_millis(200)).await;
 
         let running_action = runtime
@@ -532,7 +525,7 @@ mod tests {
             "batch policy should enter quiescing once picker finishes, got {running_action:?}"
         );
 
-        let quiescing_action = runtime
+        let quiescing_before_disconnect = runtime
             .task_manager_mut()
             .next_exit_policy_action(
                 ExitPolicyKind::Batch,
@@ -542,20 +535,24 @@ mod tests {
             )
             .expect("quiescing phase action");
         assert!(
-            matches!(quiescing_action, ExitAction::EnterStopping(_)),
-            "batch policy should stop once parser finishes, got {quiescing_action:?}"
+            matches!(quiescing_before_disconnect, ExitAction::Stay),
+            "before disconnecting router, parser should still be kept alive by runtime-held senders; got {quiescing_before_disconnect:?}"
         );
 
-        let res = tokio::time::timeout(
-            Duration::from_secs(5),
-            runtime.shutdown(ExitPolicyKind::Batch),
-        )
-        .await;
-
+        runtime.disconnect_parse_router();
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let quiescing_after_disconnect = runtime
+            .task_manager_mut()
+            .next_exit_policy_action(
+                ExitPolicyKind::Batch,
+                crate::runtime::actor::exit_policy::ExitPhase::Quiescing,
+                Instant::now(),
+                false,
+            )
+            .expect("quiescing phase action after disconnect");
         assert!(
-            res.is_ok(),
-            "batch shutdown should complete once router-held parser senders are disconnected"
+            matches!(quiescing_after_disconnect, ExitAction::EnterStopping(_)),
+            "after disconnecting router, parser should finish and batch policy should stop; got {quiescing_after_disconnect:?}"
         );
-        res.unwrap().expect("batch shutdown should succeed");
     }
 }

@@ -190,9 +190,6 @@ impl TaskController {
         self.unit_suc_cnt >= self.unit_size
     }
     pub async fn is_down(&mut self) -> bool {
-        let result = self
-            .work_cmd
-            .is_end(self.total_suc_cnt, &self.get_miss_time());
         if let Ok(Ok(cmd)) = timeout(
             Duration::from_millis(ACTOR_CMD_POLL_TIMEOUT_MS),
             self.cmds_sub.recv(),
@@ -202,7 +199,8 @@ impl TaskController {
             info_ctrl!("{} Recv cmd : {:?}", self.act_name, cmd);
             self.work_cmd = cmd;
         }
-        result
+        self.work_cmd
+            .is_end(self.total_suc_cnt, &self.get_miss_time())
     }
     pub fn update_cmd(&mut self, cmd: ActorCtrlCmd) {
         info_ctrl!("{} update cmd: {} ", self.act_name, cmd);

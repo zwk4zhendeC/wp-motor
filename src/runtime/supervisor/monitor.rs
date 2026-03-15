@@ -92,7 +92,13 @@ impl ActorMonitor {
                         None => { info_ctrl!("monitor channel closed; exit"); break; }
                     }
                 }
-                Ok(cmd) = run_ctrl.cmds_sub_mut().recv() => { info_ctrl!("monitor recv cmd: {}", cmd); run_ctrl.update_cmd(cmd); }
+                Ok(cmd) = run_ctrl.cmds_sub_mut().recv() => {
+                    info_ctrl!("monitor recv cmd: {}", cmd);
+                    run_ctrl.update_cmd(cmd);
+                    if run_ctrl.is_stop() {
+                        break;
+                    }
+                }
                 _ = sleep(Duration::from_millis(ACTOR_IDLE_TICK_MS)) => {
                     run_ctrl.rec_task_idle();
                     if run_ctrl.is_stop() { break; }

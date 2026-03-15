@@ -38,6 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Sinks/Runtime**: Fix `wp-core-connectors` sink runtime semantics around disconnect handling, raw input validation, output path resolution, and duplicate factory registration
 - **OML/Calc**: Normalize invalid arithmetic cases in `calc(...)` to `ignore`, including integer overflow, non-finite floats, and large-integer rounding edge cases
 
+## [1.18.2] - 2026-03-14
+
+### Fixed
+- **wp-lang/kv+kvarr**: Fix WPL engine/runtime parsing for keys containing `()`, `[]`, `<>`, and `{}` (for example `protocal(80)`, `arr[0]`, `list<int>`, `set{a}`)
+- **wp-lang/ref-path**: Fix `@...` field reference path parsing so bracket-style keys are accepted without consuming outer WPL syntax delimiters
+
 ## [1.18.1] - 2026-03-09
 
 ### Changed

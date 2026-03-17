@@ -213,6 +213,13 @@ impl SourceWorker {
                             self.picker.pending_count()
                         );
                     }
+                    SrcStatus::Miss => {
+                        trace_ctrl!(
+                            "{}-picker round status=Miss pending_cnt={}",
+                            source.identifier(),
+                            self.picker.pending_count()
+                        );
+                    }
                     other => {
                         info_ctrl!(
                             "{}-picker round status={:?} (pending_cnt={}, send_cnt={})",

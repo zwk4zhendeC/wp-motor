@@ -23,6 +23,23 @@ const MODELS_KNOWLEDGE_EXAMPLE_DIR: &str = "models/knowledge/example";
 const SEMANTIC_DICT_FILE: &str = "models/knowledge/semantic_dict.toml";
 const TOPOLOGY_SOURCES_DIR: &str = "topology/sources";
 const TOPOLOGY_SINKS_DIR: &str = "topology/sinks";
+const ADMIN_API_TOKEN_FILE: &str = "runtime/admin_api.token";
+const DEFAULT_ADMIN_API_BLOCK: &str = r#"
+[admin_api]
+enabled = false
+bind = "127.0.0.1:19090"
+request_timeout_ms = 15000
+max_body_bytes = 4096
+
+[admin_api.tls]
+enabled = false
+cert_file = ""
+key_file = ""
+
+[admin_api.auth]
+mode = "bearer_token"
+token_file = "runtime/admin_api.token"
+"#;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum PrjScope {
@@ -135,6 +152,7 @@ impl WarpProject {
             let eng_conf = Self::init_engine_config(self.work_root_path(), &self.dict)?;
             self.replace_engine_conf(eng_conf);
             Self::init_wpgen_config(self.work_root_path())?;
+            Self::init_admin_api_token(self.work_root_path())?;
         }
 
         // 连接器模板初始化
@@ -183,6 +201,44 @@ impl WarpProject {
         Ok(())
     }
 
+    fn init_admin_api_token<P: AsRef<Path>>(work_root: P) -> RunResult<()> {
+        use std::fs;
+
+        let work_root = work_root.as_ref();
+        let token_path = work_root.join(ADMIN_API_TOKEN_FILE);
+        if token_path.exists() {
+            return Ok(());
+        }
+        if let Some(parent) = token_path.parent() {
+            if let Err(_) = fs::create_dir_all(parent) {
+                eprintln!("Warning: Failed to create runtime directory for admin API token");
+            }
+        }
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+        let token = format!(
+            "wp-admin-{}-{}-{}\n",
+            std::process::id(),
+            now.as_secs(),
+            now.subsec_nanos()
+        );
+        fs::write(&token_path, token).owe_conf()?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            let mut perms = fs::metadata(&token_path).owe_conf()?.permissions();
+            perms.set_mode(0o600);
+            fs::set_permissions(&token_path, perms).owe_conf()?;
+        }
+
+        println!("✓ 管理面 token 文件已创建: {}", token_path.display());
+        Ok(())
+    }
+
     /// 初始化语义词典配置文件
     fn init_semantic_dict_config<P: AsRef<Path>>(work_root: P) -> RunResult<()> {
         use std::fs;
@@ -226,11 +282,26 @@ impl WarpProject {
             // 使用 EngineConfig::init() 生成配置并保存
             let conf = EngineConfig::init(&abs_root);
             conf.save_toml(&engine_config_path).owe_conf()?;
+            Self::ensure_admin_api_config_block(&engine_config_path)?;
         }
         let conf = EngineConfig::env_load_toml(&engine_config_path, dict)
             .owe_conf()?
             .conf_absolutize(&abs_root);
         Ok(conf)
+    }
+
+    fn ensure_admin_api_config_block(config_path: &Path) -> RunResult<()> {
+        let mut conf = std::fs::read_to_string(config_path).owe_conf()?;
+        if conf.contains("[admin_api]") {
+            return Ok(());
+        }
+
+        if !conf.ends_with('\n') {
+            conf.push('\n');
+        }
+        conf.push_str(DEFAULT_ADMIN_API_BLOCK);
+        std::fs::write(config_path, conf).owe_conf()?;
+        Ok(())
     }
 
     fn load_engine_config_only<P: AsRef<Path>>(
@@ -422,6 +493,15 @@ mod tests {
             work_root.join(CONF_WPGEN_FILE).exists(),
             "wpgen.toml should exist"
         );
+        let wparse_conf = std::fs::read_to_string(work_root.join(CONF_WPARSE_FILE))
+            .expect("read wparse.toml");
+        assert!(wparse_conf.contains("[admin_api]"));
+        assert!(wparse_conf.contains("enabled = false"));
+        assert!(wparse_conf.contains("token_file = \"runtime/admin_api.token\""));
+        let token_path = work_root.join(ADMIN_API_TOKEN_FILE);
+        assert!(token_path.exists(), "admin API token file should exist");
+        let token = std::fs::read_to_string(&token_path).expect("read admin API token");
+        assert!(!token.trim().is_empty(), "admin API token should not be empty");
 
         assert!(
             work_root.join(CONNECTORS_DIR).exists(),
@@ -654,6 +734,52 @@ mod tests {
             !work_root.join(MODELS_KNOWLEDGE_DIR).exists(),
             "knowledge directory should not exist in Data mode"
         );
+    }
+
+    #[test]
+    fn test_init_admin_api_token_creates_non_empty_token() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let work_root = temp_dir.path();
+
+        WarpProject::init_admin_api_token(work_root).expect("create admin API token");
+
+        let token_path = work_root.join(ADMIN_API_TOKEN_FILE);
+        assert!(token_path.exists());
+        let token = std::fs::read_to_string(&token_path).expect("read admin API token");
+        assert!(!token.trim().is_empty());
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            let mode = std::fs::metadata(&token_path)
+                .expect("stat admin API token")
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(mode, 0o600);
+        }
+    }
+
+    #[test]
+    fn test_init_engine_config_adds_admin_api_block_once() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let work_root = temp_dir.path();
+        let conf_dir = work_root.join(CONF_DIR);
+        std::fs::create_dir_all(&conf_dir).expect("create conf dir");
+        let conf_path = work_root.join(CONF_WPARSE_FILE);
+        std::fs::write(&conf_path, "version = \"1.0\"\n").expect("write wparse.toml");
+
+        WarpProject::ensure_admin_api_config_block(&conf_path).expect("append admin_api block");
+        WarpProject::ensure_admin_api_config_block(&conf_path).expect("skip duplicate admin_api block");
+
+        let conf = std::fs::read_to_string(conf_path).expect("read wparse.toml");
+        assert_eq!(conf.matches("[admin_api]").count(), 1);
+        assert!(conf.contains("bind = \"127.0.0.1:19090\""));
     }
 
     #[test]

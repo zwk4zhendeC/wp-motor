@@ -54,7 +54,11 @@ members = [
 ]
 
 [workspace.package]
+<<<<<<< HEAD
 version = "1.19.4"
+=======
+version = "1.18.3"
+>>>>>>> hotfix/1.18
 edition = "2024"
 license = "Apache-2.0"
 

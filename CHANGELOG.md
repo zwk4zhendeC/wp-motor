@@ -41,6 +41,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Sinks/Runtime**: Fix `wp-core-connectors` sink runtime semantics around disconnect handling, raw input validation, output path resolution, and duplicate factory registration
 - **OML/Calc**: Normalize invalid arithmetic cases in `calc(...)` to `ignore`, including integer overflow, non-finite floats, and large-integer rounding edge cases
+## [1.18.3] - 2026-03-16
+
+### Changed
+- **Event ID/Runtime**: Switch `wp_event_id` generation to the shared `wp-model-core::event_id::next_wp_event_id()` implementation so all sources use one unified generator
+
+### Fixed
+- **Event ID/Restart**: Prevent `wp_event_id` from falling back to a process-local fixed seed path after restart, avoiding duplicate IDs in Docker and other time-fragile runtime environments
 
 ## [1.18.2] - 2026-03-14
 

@@ -493,15 +493,18 @@ mod tests {
             work_root.join(CONF_WPGEN_FILE).exists(),
             "wpgen.toml should exist"
         );
-        let wparse_conf = std::fs::read_to_string(work_root.join(CONF_WPARSE_FILE))
-            .expect("read wparse.toml");
+        let wparse_conf =
+            std::fs::read_to_string(work_root.join(CONF_WPARSE_FILE)).expect("read wparse.toml");
         assert!(wparse_conf.contains("[admin_api]"));
         assert!(wparse_conf.contains("enabled = false"));
         assert!(wparse_conf.contains("token_file = \"runtime/admin_api.token\""));
         let token_path = work_root.join(ADMIN_API_TOKEN_FILE);
         assert!(token_path.exists(), "admin API token file should exist");
         let token = std::fs::read_to_string(&token_path).expect("read admin API token");
-        assert!(!token.trim().is_empty(), "admin API token should not be empty");
+        assert!(
+            !token.trim().is_empty(),
+            "admin API token should not be empty"
+        );
 
         assert!(
             work_root.join(CONNECTORS_DIR).exists(),
@@ -775,7 +778,8 @@ mod tests {
         std::fs::write(&conf_path, "version = \"1.0\"\n").expect("write wparse.toml");
 
         WarpProject::ensure_admin_api_config_block(&conf_path).expect("append admin_api block");
-        WarpProject::ensure_admin_api_config_block(&conf_path).expect("skip duplicate admin_api block");
+        WarpProject::ensure_admin_api_config_block(&conf_path)
+            .expect("skip duplicate admin_api block");
 
         let conf = std::fs::read_to_string(conf_path).expect("read wparse.toml");
         assert_eq!(conf.matches("[admin_api]").count(), 1);

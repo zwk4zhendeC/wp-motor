@@ -171,8 +171,12 @@ impl WpApp {
         Ok(task_manager)
     }
 
-    async fn reload_processing_p0(&mut self, runtime: &mut EngineRuntime) -> RunResult<bool> {
-        info_ctrl!("start runtime reload P0");
+    async fn reload_processing_p0(
+        &mut self,
+        runtime: &mut EngineRuntime,
+        request_id: &str,
+    ) -> RunResult<bool> {
+        info_ctrl!("runtime reload P0 start request_id={}", request_id);
         let eng_res = load_processing_res(
             &self.main_conf,
             &self.conf_manager,
@@ -200,7 +204,8 @@ impl WpApp {
         runtime.disconnect_parse_router();
         if let Err(err) = runtime.wait_processing_drained(deadline).await {
             warn_ctrl!(
-                "runtime reload P0 graceful drain timed out or failed, fallback to force replace: {}",
+                "runtime reload P0 graceful drain timed out or failed request_id={} fallback_to_force_replace error={}",
+                request_id,
                 err
             );
             if let Err(force_err) = runtime.force_stop_processing().await {
@@ -218,7 +223,11 @@ impl WpApp {
                 .expect("pending processing should exist before install"),
         );
         runtime.resume_picker().await?;
-        info_ctrl!("runtime reload P0 done");
+        info_ctrl!(
+            "runtime reload P0 done request_id={} force_replaced={}",
+            request_id,
+            force_replaced
+        );
         Ok(force_replaced)
     }
 
@@ -228,14 +237,24 @@ impl WpApp {
         req: RuntimeCommandReq,
     ) -> RunResult<()> {
         let request_id = req.request_id().to_string();
+        let command = format!("{:?}", req.command());
+        info_ctrl!(
+            "runtime command received request_id={} command={}",
+            request_id,
+            command
+        );
         self.control_handle.mark_running(&request_id, req.command());
 
         let result = match req.command() {
-            CommandType::LoadModel => match self.reload_processing_p0(runtime).await {
+            CommandType::LoadModel => match self.reload_processing_p0(runtime, &request_id).await {
                 Ok(false) => RuntimeCommandResult::ReloadDone,
                 Ok(true) => RuntimeCommandResult::ReloadDoneWithForceReplace,
                 Err(err) => {
-                    warn_ctrl!("runtime reload P0 failed: {}", err);
+                    warn_ctrl!(
+                        "runtime reload P0 failed request_id={} error={}",
+                        request_id,
+                        err
+                    );
                     RuntimeCommandResult::ReloadFailed {
                         reason: err.to_string(),
                     }
@@ -243,7 +262,18 @@ impl WpApp {
             },
         };
 
+        let result_code = match &result {
+            RuntimeCommandResult::ReloadDone => "reload_done",
+            RuntimeCommandResult::ReloadDoneWithForceReplace => "reload_done_with_force_replace",
+            RuntimeCommandResult::ReloadFailed { .. } => "reload_failed",
+        };
         self.control_handle.finish(&request_id, result.clone());
+        info_ctrl!(
+            "runtime command finished request_id={} command={} result={}",
+            request_id,
+            command,
+            result_code
+        );
         req.respond(RuntimeCommandResp::accepted(request_id, result));
         Ok(())
     }

@@ -50,7 +50,7 @@ impl MultiParser {
                     // 根据是否有残留数据返回不同的结果
                     if un_parsed.is_empty() || un_parsed.is_empty() {
                         let record = Arc::new(tdo_crate);
-                        info_edata!(event.event_id, "wpl parse suc! wpl:{} ", wpl_key,);
+                        debug_edata!(event.event_id, "wpl parse suc! wpl:{} ", wpl_key,);
                         return ProcessResult::Success { wpl_key, record };
                     } else {
                         let parsed_len = event.payload.len() - un_parsed.len();

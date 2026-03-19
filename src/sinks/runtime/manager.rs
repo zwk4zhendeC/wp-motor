@@ -93,6 +93,7 @@ impl SinkRuntime {
         stat_reqs: Vec<StatReq>,
         batch_size: usize,
     ) -> Self {
+        println!("sink_name:{:?}",name.clone().into());
         let batch_size = batch_size.max(1);
         let backup_name = format!("{}_bak", name.clone().into());
         let normal_stat = MetricCollectors::new(name.clone().into(), stat_reqs.clone());

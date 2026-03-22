@@ -282,8 +282,11 @@ impl WarpProject {
             // 使用 EngineConfig::init() 生成配置并保存
             let conf = EngineConfig::init(&abs_root);
             conf.save_toml(&engine_config_path).owe_conf()?;
-            Self::ensure_admin_api_config_block(&engine_config_path)?;
         }
+        // `WarpProject::build()` may have already materialized wparse.toml via
+        // `EngineConfig::load_or_init`, so the admin block must be enforced
+        // regardless of whether the file pre-existed.
+        Self::ensure_admin_api_config_block(&engine_config_path)?;
         let conf = EngineConfig::env_load_toml(&engine_config_path, dict)
             .owe_conf()?
             .conf_absolutize(&abs_root);

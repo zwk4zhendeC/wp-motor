@@ -4,7 +4,7 @@ use orion_conf::EnvTomlLoad;
 use orion_conf::TomlIO;
 use orion_conf::error::{ConfIOReason, OrionConfResult};
 use orion_error::{ErrorOwe, ErrorWith, ToStructError, UvsFrom};
-use orion_variate::EnvDict;
+use orion_variate::{EnvDict, EnvEvaluable};
 use serde_json::json;
 use wp_conf::connectors::{ParamMap, param_value_from_toml};
 use wp_conf::sinks::ConnectorRec;
@@ -89,6 +89,7 @@ impl WarpConf {
             .owe_res()
             .with("load_or_init")
             .want("load engine config")?
+            .env_eval(dict)
             .conf_absolutize(self.work_root());
         let configured_root = wp_conf.sinks_root().to_string();
         let configured_path = Path::new(&configured_root);

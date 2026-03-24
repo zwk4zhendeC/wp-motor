@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.9] - 2026-03-24
+
+### Fixed
+- **Admin API/Auth**: Apply the normal `env_eval + conf_absolutize` pipeline to all engine-config loading paths so `${HOME}` in `admin_api.auth.token_file` is expanded consistently in daemon/runtime validation flows instead of being treated as a work-root-relative path
+- **wpgen/Clean**: Make `wpgen data clean` remove file-sink shard outputs like `gen-r*.dat` in addition to the primary file path, and harden the wpgen clean test setup so it no longer depends on incidental `wpgen.toml` creation side effects
+
 ## [1.19.8] - 2026-03-24
 
 ### Fixed

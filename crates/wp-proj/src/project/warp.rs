@@ -8,7 +8,7 @@ use super::{Connectors, Oml, ProjectPaths, Sinks, Sources, Wpl, init::PrjScope};
 use crate::{
     models::knowledge::Knowledge, sinks::clean_outputs, wparse::WParseManager, wpgen::WpGenManager,
 };
-use orion_variate::EnvDict;
+use orion_variate::{EnvDict, EnvEvaluable};
 use wp_conf::engine::EngineConfig;
 use wp_error::run_error::RunResult;
 
@@ -63,6 +63,7 @@ impl WarpProject {
         let eng_conf = Arc::new(
             EngineConfig::load_or_init(&abs_root, dict)
                 .expect("load engine config")
+                .env_eval(dict)
                 .conf_absolutize(&abs_root),
         );
         let connectors = Connectors::new(paths.connectors.clone());

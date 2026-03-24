@@ -108,8 +108,7 @@ fn cleanup_targets(conf: &WpGenResolved, work_root: &str) -> Vec<PathBuf> {
     let primary = absolute_output_path(work_root, &raw);
     let mut targets = vec![primary.clone()];
 
-    if conf.conf.generator.parallel > 1
-        && let Some(pattern) = shard_glob_pattern(&primary)
+    if let Some(pattern) = shard_glob_pattern(&primary)
         && let Ok(entries) = glob(&pattern)
     {
         for entry in entries.flatten() {

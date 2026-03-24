@@ -6,7 +6,7 @@ use futures_util::TryFutureExt;
 use orion_conf::error::{ConfIOReason, OrionConfResult};
 use orion_conf::{EnvTomlLoad, ErrorOwe, ToStructError, TomlIO};
 use orion_error::{ErrorWith, UvsFrom};
-use orion_variate::EnvDict;
+use orion_variate::{EnvDict, EnvEvaluable};
 use std::cell::OnceCell;
 use std::path::{Path, PathBuf};
 use tokio::fs::create_dir_all;
@@ -104,14 +104,16 @@ impl WarpConf {
         let conf = EngineConfig::env_load_toml(&path, dict)
             .owe_res()
             .with(&path)?
+            .env_eval(dict)
             .conf_absolutize(self.work_root());
         Ok(conf)
     }
 
     /// 清理工作目录中的配置文件
     pub fn cleanup_work_directory(&self, dict: &EnvDict) -> AnyResult<()> {
-        let wp_conf =
-            EngineConfig::load_or_init(self.work_root(), dict)?.conf_absolutize(self.work_root());
+        let wp_conf = EngineConfig::load_or_init(self.work_root(), dict)?
+            .env_eval(dict)
+            .conf_absolutize(self.work_root());
         backup_clean(self.config_path_string(ENGINE_CONF_FILE))?;
         backup_clean(wp_conf.src_conf_of(WPSRC_TOML))?;
         // PUBLIC_ADM 废弃：不再清理 public.oml
@@ -143,6 +145,81 @@ impl WarpConf {
     {
         let path = self.config_path_string(file_name);
         T::try_load(path.as_str(), dict).ok()?
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    fn home_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    struct HomeOverride {
+        original: Option<std::ffi::OsString>,
+    }
+
+    impl HomeOverride {
+        fn new(home: &Path) -> Self {
+            let original = std::env::var_os("HOME");
+            unsafe {
+                std::env::set_var("HOME", home);
+            }
+            Self { original }
+        }
+    }
+
+    impl Drop for HomeOverride {
+        fn drop(&mut self) {
+            match &self.original {
+                Some(home) => unsafe {
+                    std::env::set_var("HOME", home);
+                },
+                None => unsafe {
+                    std::env::remove_var("HOME");
+                },
+            }
+        }
+    }
+
+    #[test]
+    fn load_engine_config_expands_admin_api_token_file_env() {
+        let _guard = home_lock().lock().expect("lock HOME override");
+        let temp = tempfile::tempdir().expect("temp dir");
+        let home = temp.path().join("fake-home");
+        std::fs::create_dir_all(&home).expect("create fake home");
+        let _home = HomeOverride::new(&home);
+
+        let conf_dir = temp.path().join("conf");
+        std::fs::create_dir_all(&conf_dir).expect("create conf dir");
+        std::fs::write(
+            conf_dir.join(ENGINE_CONF_FILE),
+            r#"version = "1.0"
+
+[admin_api]
+enabled = false
+
+[admin_api.auth]
+mode = "bearer_token"
+token_file = "${HOME}/.warp_parse/admin_api.token"
+"#,
+        )
+        .expect("write config");
+
+        let conf = WarpConf::new(temp.path())
+            .load_engine_config(&EnvDict::new())
+            .expect("load config");
+
+        assert_eq!(
+            conf.admin_api().auth.token_file,
+            home.join(".warp_parse")
+                .join("admin_api.token")
+                .display()
+                .to_string()
+        );
     }
 }
 

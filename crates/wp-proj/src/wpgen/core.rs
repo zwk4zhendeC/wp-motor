@@ -1,8 +1,9 @@
 use anyhow::Result;
+use glob::glob;
 use orion_conf::error::OrionConfResult;
 use orion_error::ErrorOwe;
 use orion_variate::EnvDict;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use wp_conf::structure::SinkInstanceConf;
 use wp_engine::facade::config::{WarpConf, WpGenResolved};
 use wp_engine::facade::generator::SampleGRA;
@@ -71,6 +72,58 @@ pub struct GenCleanReport {
     pub message: Option<String>,
 }
 
+fn absolute_output_path(work_root: &str, raw: &str) -> PathBuf {
+    let resolved_path = Path::new(raw);
+    if resolved_path.is_absolute() {
+        resolved_path.to_path_buf()
+    } else {
+        Path::new(work_root).join(resolved_path)
+    }
+}
+
+fn shard_glob_pattern(primary: &Path) -> Option<String> {
+    let file_name = primary.file_name()?.to_str()?;
+    let parent = primary.parent()?;
+    if let Some((stem, ext)) = file_name.rsplit_once('.') {
+        Some(
+            parent
+                .join(format!("{stem}-r*.{ext}"))
+                .to_string_lossy()
+                .to_string(),
+        )
+    } else {
+        Some(
+            parent
+                .join(format!("{file_name}-r*"))
+                .to_string_lossy()
+                .to_string(),
+        )
+    }
+}
+
+fn cleanup_targets(conf: &WpGenResolved, work_root: &str) -> Vec<PathBuf> {
+    let Some(raw) = conf.out_sink.resolve_file_path() else {
+        return Vec::new();
+    };
+    let primary = absolute_output_path(work_root, &raw);
+    let mut targets = vec![primary.clone()];
+
+    if conf.conf.generator.parallel > 1
+        && let Some(pattern) = shard_glob_pattern(&primary)
+        && let Ok(entries) = glob(&pattern)
+    {
+        for entry in entries.flatten() {
+            if entry.is_file() {
+                targets.push(entry);
+            }
+        }
+    }
+
+    targets.sort();
+    targets.dedup();
+    targets
+}
+
 /// 清理 wpgen 的输出文件（如果 out sink 为 file），返回结构化报告；不打印
 pub fn clean_wpgen_output_file(
     work_root: &str,
@@ -88,21 +141,24 @@ pub fn clean_wpgen_output_file(
     match load_wpgen_resolved(conf_name, &god, dict) {
         Ok(conf) => {
             if let Some(p) = conf.out_sink.resolve_file_path() {
-                let resolved_path = Path::new(&p);
-                let full_path = if resolved_path.is_absolute() {
-                    resolved_path.to_path_buf()
-                } else {
-                    Path::new(work_root).join(resolved_path)
-                };
-                let existed = full_path.exists();
-                let mut cleaned = false;
-                if existed {
-                    cleaned = std::fs::remove_file(&full_path).is_ok();
+                let full_path = absolute_output_path(work_root, &p);
+                let targets = cleanup_targets(&conf, work_root);
+                let mut existed = false;
+                let mut cleaned_any = false;
+                let mut remove_failed = false;
+                for target in targets {
+                    if target.exists() {
+                        existed = true;
+                        match std::fs::remove_file(&target) {
+                            Ok(_) => cleaned_any = true,
+                            Err(_) => remove_failed = true,
+                        }
+                    }
                 }
                 Ok(GenCleanReport {
                     path: Some(full_path.to_string_lossy().to_string()),
                     existed,
-                    cleaned,
+                    cleaned: cleaned_any && !remove_failed,
                     message: None,
                 })
             } else {

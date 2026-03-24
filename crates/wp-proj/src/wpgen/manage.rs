@@ -80,6 +80,22 @@ mod tests {
 
     use super::*;
     use crate::project::{WarpProject, init::PrjScope};
+    use crate::wpgen::load_wpgen_resolved;
+    use wp_engine::facade::config::WarpConf;
+
+    fn sharded_output(path: &Path, idx: usize) -> std::path::PathBuf {
+        let parent = path.parent().expect("output parent");
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .expect("output file name");
+        let sharded = if let Some((stem, ext)) = name.rsplit_once('.') {
+            format!("{stem}-r{idx}.{ext}")
+        } else {
+            format!("{name}-r{idx}")
+        };
+        parent.join(sharded)
+    }
 
     #[test]
     fn clean_outputs_remove_file_sink_outputs() {
@@ -89,19 +105,26 @@ mod tests {
             .init_basic(PrjScope::Full)
             .assert("init project with connectors");
 
-        let output_file = case_path.path().join("data/in_dat/gen.dat");
+        let god = WarpConf::new(case_path.path());
+        let resolved = load_wpgen_resolved("wpgen.toml", &god, &EnvDict::test_default())
+            .expect("resolve wpgen output");
+        let output_file = case_path
+            .path()
+            .join(resolved.out_sink.resolve_file_path().expect("output path"));
         std::fs::create_dir_all(output_file.parent().unwrap()).expect("dir");
-        std::fs::write(&output_file, "payload").expect("write sample");
-        assert!(output_file.exists());
+        let shard0 = sharded_output(&output_file, 0);
+        let shard1 = sharded_output(&output_file, 1);
+        std::fs::write(&shard0, "payload-0").expect("write shard 0");
+        std::fs::write(&shard1, "payload-1").expect("write shard 1");
+        assert!(shard0.exists());
+        assert!(shard1.exists());
 
         let manager = WpGenManager::new(case_path.path());
         let cleaned = manager
             .clean_outputs(&EnvDict::test_default())
             .expect("clean outputs");
         assert!(cleaned, "expected wpgen data clean to report work done");
-        assert!(
-            !output_file.exists(),
-            "wpgen generated file should be removed"
-        );
+        assert!(!shard0.exists(), "wpgen shard 0 should be removed");
+        assert!(!shard1.exists(), "wpgen shard 1 should be removed");
     }
 }

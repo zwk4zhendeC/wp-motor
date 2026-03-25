@@ -50,3 +50,13 @@ WP Engine 是一个 Cargo workspace：
   - 用户参考：`docs/80-reference/params/sink_tcp.md`
   - CLI 手册：`docs/cli/wparse.md`、`docs/10-user/02-config/06-wpgen.md`
   - 设计文档：`docs/30-decision/01-architecture.md`、`docs/50-dev/design/sinks_loader.md`
+
+### Skills 使用约束
+- 凡涉及正式配置文件、配置加载链路、TOML 解析入口，必须使用 `config-loading-contract` skill。
+- 命中以下任一情况时，不得跳过该 skill：
+  - 修改 `wparse.toml`、`wpgen.toml`、`wpsrc.toml`、engine config 或同类正式配置文件
+  - 新增或修改 `path`、`token_file`、`cert_file`、`key_file`、`repo`、`url` 等配置项
+  - 修改 daemon、batch、client profile、admin_api、project_remote 等依赖配置加载的入口
+  - review 任何 `read_to_string + toml::from_str`、`env_load_toml`、`load_or_init`、`resolve_path` 相关实现
+- 配置相关实现必须遵守统一流水线：`parse -> env_eval -> path resolve/conf_absolutize -> validate`。
+- 禁止在业务代码中为正式配置文件新增平行的手工解析链路；如果确实无法复用统一 loader，必须在代码中说明原因并补充等价测试。

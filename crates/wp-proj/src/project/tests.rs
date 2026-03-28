@@ -535,12 +535,12 @@ token_file = "${HOME}/.warp_parse/admin_api.token"
             check_to_result(project.oml().check(&EnvDict::test_default()))
         );
         // 检查OML文件是否存在
-        let oml_path_toml = format!("{}/models/oml/knowdb.toml", work);
+        let knowdb_path = format!("{}/models/knowledge/knowdb.toml", work);
         let oml_path_oml = format!("{}/models/oml/test.oml", work);
         println!(
-            "DEBUG: OML TOML file exists at {}: {}",
-            oml_path_toml,
-            std::path::Path::new(&oml_path_toml).exists()
+            "DEBUG: KnowDB file exists at {}: {}",
+            knowdb_path,
+            std::path::Path::new(&knowdb_path).exists()
         );
         println!(
             "DEBUG: OML .oml file exists at {}: {}",

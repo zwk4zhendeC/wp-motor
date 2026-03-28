@@ -62,27 +62,12 @@ impl Oml {
         let oml_dir = self.oml_root();
         let initializer = TemplateInitializer::new(oml_dir.clone());
 
-        // Prepare file contents
         let example_oml_content = include_str!("../example/oml/nginx.oml");
-        let knowdb_content = r#"# OML Knowledge Database Configuration
-# This file defines the OML models available for use
 
-[[models]]
-name = "example_oml"
-file = "example.oml"
-description = "Example OML model for demonstration purposes"
-rule = "/example/*"
-"#;
-
-        // Write all files using the initializer
-        initializer.write_files(&[
-            ("example.oml", example_oml_content),
-            ("knowdb.toml", knowdb_content),
-        ])?;
+        initializer.write_files(&[("example.oml", example_oml_content)])?;
 
         println!("Created example OML files:");
         println!("  - {:?}", oml_dir.join("example.oml"));
-        println!("  - {:?}", oml_dir.join("knowdb.toml"));
 
         Ok(())
     }
@@ -159,6 +144,10 @@ mod tests {
 
         let example_file = temp.path().join("models/oml/example.oml");
         assert!(example_file.exists());
+        assert!(
+            !temp.path().join("models/oml/knowdb.toml").exists(),
+            "knowdb.toml should not be generated under models/oml"
+        );
         assert!(!temp.path().join("models/oml/*.oml").exists());
     }
 }

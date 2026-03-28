@@ -379,7 +379,7 @@ mod tests {
     const MODELS_WPL_PARSE_FILE: &str = "models/wpl/parse.wpl";
     const MODELS_WPL_SAMPLE_FILE: &str = "models/wpl/sample.dat";
     const MODELS_OML_EXAMPLE_FILE: &str = "models/oml/example.oml";
-    const MODELS_OML_KNOWDB_FILE: &str = "models/oml/knowdb.toml";
+    const MODELS_KNOWLEDGE_KNOWDB_FILE: &str = "models/knowledge/knowdb.toml";
     const TOPOLOGY_WPSRC_FILE: &str = "topology/sources/wpsrc.toml";
 
     fn admin_api_home_lock() -> &'static Mutex<()> {
@@ -601,7 +601,7 @@ mod tests {
             "example.oml should exist"
         );
         assert!(
-            work_root.join(MODELS_OML_KNOWDB_FILE).exists(),
+            work_root.join(MODELS_KNOWLEDGE_KNOWDB_FILE).exists(),
             "knowdb.toml should exist"
         );
 
@@ -918,7 +918,7 @@ mod tests {
             "example.oml should exist"
         );
         assert!(
-            work_root.join(MODELS_OML_KNOWDB_FILE).exists(),
+            work_root.join(MODELS_KNOWLEDGE_KNOWDB_FILE).exists(),
             "knowdb.toml should exist"
         );
         assert!(

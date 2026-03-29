@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.12] - 2026-03-29
+
+### Fixed
+- **CLI/Paths**: Unify human-readable path rendering across source stats, sink stats, and rescue detail tables so terminal output prefers shorter relative-style paths and truncates long tails consistently
+- **Recovery/Stats**: Switch rescue recovery and rescue-stat detail output from long absolute file paths to rescue-root-relative paths, keeping metric/stat targets readable in large workspaces
+
 ## [1.19.11] - 2026-03-29
 
 ### Added

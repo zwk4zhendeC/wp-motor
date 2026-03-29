@@ -160,7 +160,10 @@ mod tests {
         picker.set_pending_front(second.clone());
 
         assert_eq!(picker.pending_count(), 2);
-        assert_eq!(*picker.pending_bytes(), batch_bytes(&first) + batch_bytes(&second));
+        assert_eq!(
+            *picker.pending_bytes(),
+            batch_bytes(&first) + batch_bytes(&second)
+        );
 
         let front = picker.take_pending().expect("should take front batch");
         assert_eq!(front.len(), 1);

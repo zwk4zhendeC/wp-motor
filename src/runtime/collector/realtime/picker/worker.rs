@@ -250,7 +250,11 @@ impl SourceWorker {
                     rt_name,
                     self.picker.pending_count()
                 );
-                info_mtrc!("{} pick-pending bytes: {}", rt_name, self.picker.pending_bytes());
+                info_mtrc!(
+                    "{} pick-pending bytes: {}",
+                    rt_name,
+                    self.picker.pending_bytes()
+                );
                 stat_ext
                     .send_stat(&self.mon_s)
                     .await

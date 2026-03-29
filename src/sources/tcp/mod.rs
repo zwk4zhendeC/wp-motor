@@ -3,7 +3,6 @@
 //! 模块结构：
 //! - framing.rs：TCP消息分帧处理（行/长度前缀/自动检测）
 //! - source.rs：TcpSource 实现，直接管理监听 loop 交付的 sockets
-//! - factory.rs：参数解析与 TcpSourceFactory
 //! - zc_types.rs：零拷贝数据结构
 
 pub mod acceptor {

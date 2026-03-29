@@ -27,22 +27,32 @@ impl JMActPicker {
         let mut rs = RoundStat::new();
         // 以当前 pending 水位制定“是否拉取、拉取配额”的计划
         let pending_before_pull = self.pending_count();
+        let pending_bytes_before_pull = self.pending_bytes();
         let pull_plan = self.pull_policy().plan_pull(pending_before_pull);
-        if pull_plan.allow() {
+        if pull_plan.allow() && !self.pending_bytes_at_capacity() {
             if task_ctrl.not_alone() {
                 let status = self
                     .fetch_into_pending(source, task_ctrl, pull_plan.fetch_budget(), timeout)
                     .await?;
                 trace_ctrl!(
-                    "{}-picker fetch status={:?} pending_after={}",
+                    "{}-picker fetch status={:?} pending_after={} pending_bytes_after={}",
                     source.identifier(),
                     status,
-                    self.pending_count()
+                    self.pending_count(),
+                    self.pending_bytes()
                 );
                 rs.up_src_status(status);
             } else {
                 rs.up_src_status(SrcStatus::Miss);
             }
+        } else if self.pending_bytes_at_capacity() {
+            debug_data!(
+                "{}-picker pull paused by pending byte cap: pending_batches={} pending_bytes={} cap={}",
+                source.identifier(),
+                pending_before_pull,
+                pending_bytes_before_pull,
+                crate::runtime::collector::realtime::constants::PICKER_PENDING_MAX_BYTES
+            );
         }
 
         // 若源侧终止，则倾向“清空 pending”后尽快退出（full_post=true）
@@ -59,10 +69,11 @@ impl JMActPicker {
                     post_plan.batch_size(),
                 );
                 trace_ctrl!(
-                    "{}-picker posted {} events to parsers (pending_rem={})",
+                    "{}-picker posted {} events to parsers (pending_rem={} pending_bytes_rem={})",
                     source.identifier(),
                     batch_rs.send_cnt(),
-                    self.pending_count()
+                    self.pending_count(),
+                    self.pending_bytes()
                 );
                 let progressed = batch_rs.send_cnt() > 0;
                 // 若本轮没有任何投递进展，进入 post 退避（跨若干轮跳过 post）

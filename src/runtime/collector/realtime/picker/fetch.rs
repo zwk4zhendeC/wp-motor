@@ -41,9 +41,10 @@ impl JMActPicker {
                 sample_log_with_hits!(
                     FETCH_PENDING_LOG_HITS,
                     info_mtrc,
-                    "fetch_into_pending status={:?} pending_cnt={}",
+                    "fetch_into_pending status={:?} pending_cnt={} pending_bytes={}",
                     status,
-                    self.pending_count()
+                    self.pending_count(),
+                    self.pending_bytes()
                 );
                 Ok(status)
             }
@@ -99,6 +100,15 @@ impl JMActPicker {
                         }
                     }
                     self.extend_pending(batch);
+                    if self.pending_bytes_at_capacity() {
+                        debug_data!(
+                            "{}-picker stop nonblocking fetch on pending byte cap: pending_cnt={} pending_bytes={}",
+                            source.identifier(),
+                            self.pending_count(),
+                            self.pending_bytes()
+                        );
+                        break;
+                    }
                 }
                 Some(_) | None => {
                     status = SrcStatus::Miss;
@@ -190,6 +200,15 @@ impl JMActPicker {
                             }
                             self.extend_pending(batch);
                             total += 1;
+                            if self.pending_bytes_at_capacity() {
+                                debug_data!(
+                                    "{}-picker stop blocking fetch on pending byte cap: pending_cnt={} pending_bytes={}",
+                                    source.identifier(),
+                                    self.pending_count(),
+                                    self.pending_bytes()
+                                );
+                                break;
+                            }
                         }
                         Err(e) => {
                             warn_data!(
@@ -254,6 +273,17 @@ mod tests {
             next_event_id(),
             tag,
             RawData::from_string(tag.to_string()),
+            Arc::new(tags),
+        )
+    }
+
+    fn make_bytes_event(tag: &str, size: usize) -> SourceEvent {
+        let mut tags = Tags::new();
+        tags.set("tag", tag.to_string());
+        SourceEvent::new(
+            next_event_id(),
+            tag,
+            RawData::Bytes(vec![b'x'; size].into()),
             Arc::new(tags),
         )
     }
@@ -483,5 +513,44 @@ mod tests {
 
         assert_eq!(status, SrcStatus::Ready, "应完成一次阻塞读取");
         assert_eq!(picker.pending_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn fetch_into_pending_stops_when_picker_pending_bytes_hit_cap() {
+        let (tx, _rx) = mpsc::channel::<SourceBatch>(TEST_SOURCE_CHANNEL_CAP);
+        let mut picker =
+            JMActPicker::new(ParseDispatchRouter::new(vec![ParseWorkerSender::new(tx)]));
+        let mut ctrl = make_task_ctrl();
+        let large_batch = vec![make_bytes_event(
+            "large",
+            crate::runtime::collector::realtime::constants::PICKER_PENDING_MAX_BYTES / 3 + 1,
+        )];
+        let mut src = TryBatchSource::new(
+            "try",
+            vec![
+                large_batch.clone(),
+                large_batch.clone(),
+                large_batch.clone(),
+                large_batch,
+            ],
+        );
+
+        let status = picker
+            .fetch_into_pending(
+                &mut src,
+                &mut ctrl,
+                TEST_TASK_UNIT,
+                Duration::from_millis(TEST_FETCH_TIMEOUT_MS),
+            )
+            .await
+            .expect("try-mode fetch should stop on pending byte cap");
+
+        assert_eq!(status, SrcStatus::Ready);
+        assert_eq!(src.idx, 3, "达到 pending byte cap 后应停止继续拉取");
+        assert_eq!(picker.pending_count(), 3);
+        assert!(
+            *picker.pending_bytes()
+                >= crate::runtime::collector::realtime::constants::PICKER_PENDING_MAX_BYTES
+        );
     }
 }

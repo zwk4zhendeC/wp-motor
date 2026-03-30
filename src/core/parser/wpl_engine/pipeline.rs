@@ -7,6 +7,7 @@ use crate::stat::metric_collect::MetricCollectors;
 use std::cmp::Ordering as CmpOrdering;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+use wp_model_core::model::{DataField, DataRecord};
 use wp_model_core::raw::RawData;
 use wp_parse_api::DataResult;
 use wp_stat::StatRecorder;
@@ -26,6 +27,11 @@ pub struct WplPipeline {
     send_rr: Arc<AtomicUsize>,
     wpl_key: String,
     s_name: String,
+    package_name: String,
+    rule_name: String,
+    // 仅当统计请求显式包含 package_name/rule_name 时开启。
+    // 这样可避免默认路径上每条数据都做额外字段构造与拷贝。
+    stat_need_pkg_rule: bool,
     stat_ext: MetricCollectors,
 }
 
@@ -33,6 +39,8 @@ impl WplPipeline {
     pub fn new(
         index: usize,
         wpl_key: String,
+        package_name: String,
+        rule_name: String,
         fun_vec: Vec<AnnotationType>,
         parser: WplEvaluator,
         output: Vec<SinkGroupAgent>,
@@ -40,6 +48,12 @@ impl WplPipeline {
     ) -> Self {
         //let s_name = name.split('/').last().unwrap_or(&name);
         let s_name = wpl_key.clone();
+        // 按需开启 parse 维度补齐：只有请求这两个维度时才走补齐逻辑。
+        let stat_need_pkg_rule = stat_reqs.iter().any(|r| {
+            r.collect
+                .iter()
+                .any(|f| matches!(f.as_str(), "package_name" | "rule_name"))
+        });
         let stat_ext = MetricCollectors::new(wpl_key.clone(), stat_reqs);
 
         Self {
@@ -52,6 +66,9 @@ impl WplPipeline {
             hit_cnt: 0,
             access_cnt: 0,
             s_name,
+            package_name,
+            rule_name,
+            stat_need_pkg_rule,
             stat_ext,
         }
     }
@@ -75,18 +92,57 @@ impl WplPipeline {
             .proc(data.event_id, data.payload.clone(), oth_suc_len)
         {
             Ok((mut record, left)) => {
-                self.stat_ext.record_begin(self.wpl_key.as_str(), None);
+                if self.stat_need_pkg_rule {
+                    // begin 阶段使用稳定维度，避免因 record 尚未填充导致分组漂移。
+                    let stat_begin = DataRecord::from(vec![
+                        DataField::from_chars("package_name", self.package_name.as_str()),
+                        DataField::from_chars("rule_name", self.rule_name.as_str()),
+                    ]);
+                    self.stat_ext
+                        .record_begin(self.wpl_key.as_str(), Some(&stat_begin));
+                } else {
+                    self.stat_ext.record_begin(self.wpl_key.as_str(), None);
+                }
                 for func in self.fun_vec.iter() {
                     func.proc(data, &mut record)?;
                 }
-                self.stat_ext
-                    .record_end(self.wpl_key.as_str(), Some(&record));
+                if self.stat_need_pkg_rule {
+                    // end 阶段优先保留 record 中已有字段；缺失时再回填默认值。
+                    let mut stat_end = record.clone();
+                    if stat_end.field("package_name").is_none() {
+                        stat_end.append(DataField::from_chars(
+                            "package_name",
+                            self.package_name.as_str(),
+                        ));
+                    }
+                    if stat_end.field("rule_name").is_none() {
+                        stat_end
+                            .append(DataField::from_chars("rule_name", self.rule_name.as_str()));
+                    }
+                    self.stat_ext
+                        .record_end(self.wpl_key.as_str(), Some(&stat_end));
+                } else {
+                    self.stat_ext
+                        .record_end(self.wpl_key.as_str(), Some(&record));
+                }
                 Ok((record, RawData::from_string(left)))
             }
             Err(e) => Err(e),
         }
     }
     pub async fn send_stat(&mut self, mon_send: &MonSend) -> WparseResult<()> {
+        if !self.stat_ext.has_pending_data() {
+            if self.stat_need_pkg_rule {
+                // 空闲周期也触发维度桶，保证监控面板维度连续可见。
+                let rec = DataRecord::from(vec![
+                    DataField::from_chars("package_name", self.package_name.as_str()),
+                    DataField::from_chars("rule_name", self.rule_name.as_str()),
+                ]);
+                self.stat_ext.touch_task_record(self.wpl_key.as_str(), &rec);
+            } else {
+                self.stat_ext.touch_task_unit(self.wpl_key.as_str());
+            }
+        }
         self.stat_ext.send_stat(mon_send).await.owe_sys()?;
         Ok(())
     }
@@ -138,6 +194,8 @@ mod tests {
         WplPipeline::new(
             0,
             "demo/rule".to_string(),
+            "demo".to_string(),
+            "rule".to_string(),
             Vec::new(),
             evaluator,
             output,

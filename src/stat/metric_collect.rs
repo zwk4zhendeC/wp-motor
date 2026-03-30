@@ -27,14 +27,76 @@ pub struct MetricCollectors {
 }
 
 pub fn extract_metric_dimensions(tdo: &DataRecord, collects: &[String]) -> DataDim {
+    extract_metric_dimensions_with_target(tdo, collects, "")
+}
+
+fn extract_metric_dimensions_with_target(
+    tdo: &DataRecord,
+    collects: &[String],
+    target: &str,
+) -> DataDim {
     let mut data = DataDim::with_capacity(collects.len());
     let formatter = Raw;
+    let parsed_target = target.rsplit_once('/');
     for key in collects {
-        let value = tdo.field(key.as_str());
-        data.push(value.map(|x| formatter.fmt_field(x).to_string()));
+        match key.as_str() {
+            "package_name" => {
+                let value = tdo
+                    .field("package_name")
+                    .map(|x| formatter.fmt_field(x).to_string());
+                data.push(value.or_else(|| parsed_target.map(|(pkg, _)| pkg.to_string())));
+            }
+            "rule_name" => {
+                let value = tdo
+                    .field("rule_name")
+                    .map(|x| formatter.fmt_field(x).to_string());
+                data.push(value.or_else(|| parsed_target.map(|(_, rule)| rule.to_string())));
+            }
+            "sink_group" => {
+                let value = tdo
+                    .field("sink_group")
+                    .map(|x| formatter.fmt_field(x).to_string());
+                data.push(value.or_else(|| parsed_target.map(|(group, _)| group.to_string())));
+            }
+            "sink_name" => {
+                let value = tdo
+                    .field("sink_name")
+                    .map(|x| formatter.fmt_field(x).to_string());
+                data.push(value.or_else(|| parsed_target.map(|(_, name)| name.to_string())));
+            }
+            _ => {
+                let value = tdo.field(key.as_str());
+                data.push(value.map(|x| formatter.fmt_field(x).to_string()));
+            }
+        }
     }
     data
 }
+
+fn extract_metric_dimensions_from_target_only(collects: &[String], target: &str) -> DataDim {
+    let mut data = DataDim::with_capacity(collects.len());
+    let parsed_target = target.rsplit_once('/');
+    for key in collects {
+        match key.as_str() {
+            "package_name" => data.push(parsed_target.map(|(pkg, _)| pkg.to_string())),
+            "rule_name" => data.push(parsed_target.map(|(_, rule)| rule.to_string())),
+            "sink_group" => data.push(parsed_target.map(|(group, _)| group.to_string())),
+            "sink_name" => data.push(parsed_target.map(|(_, name)| name.to_string())),
+            _ => data.push(None),
+        }
+    }
+    data
+}
+
+fn is_target_only_collect(collects: &[String]) -> bool {
+    collects.iter().all(|k| {
+        matches!(
+            k.as_str(),
+            "package_name" | "rule_name" | "sink_group" | "sink_name"
+        )
+    })
+}
+
 impl StatRecorder<Option<&DataRecord>> for MetricCollectors {
     fn record_begin(&mut self, target: &str, dat: Option<&DataRecord>) {
         for idx in 0..self.unit_collectors_end {
@@ -46,7 +108,11 @@ impl StatRecorder<Option<&DataRecord>> for MetricCollectors {
                 let (items, groups) = (&mut self.items, &self.data_groups);
                 for group in groups.iter() {
                     if let Some((last, rest)) = group.indices.split_last() {
-                        let data = extract_metric_dimensions(tdo, group.collect.as_slice());
+                        let data = extract_metric_dimensions_with_target(
+                            tdo,
+                            group.collect.as_slice(),
+                            target,
+                        );
                         for idx in rest {
                             items[*idx].record_begin(target, data.clone());
                         }
@@ -55,8 +121,24 @@ impl StatRecorder<Option<&DataRecord>> for MetricCollectors {
                 }
             }
             None => {
-                for idx in self.unit_collectors_end..self.items.len() {
-                    self.items[idx].record_begin(target, ());
+                let (items, groups) = (&mut self.items, &self.data_groups);
+                for group in groups.iter() {
+                    if let Some((last, rest)) = group.indices.split_last() {
+                        if is_target_only_collect(group.collect.as_slice()) {
+                            let data = extract_metric_dimensions_from_target_only(
+                                group.collect.as_slice(),
+                                target,
+                            );
+                            for idx in rest {
+                                items[*idx].record_begin(target, data.clone());
+                            }
+                            items[*last].record_begin(target, data);
+                        } else {
+                            for idx in group.indices.iter() {
+                                items[*idx].record_begin(target, ());
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -72,7 +154,11 @@ impl StatRecorder<Option<&DataRecord>> for MetricCollectors {
                 let (items, groups) = (&mut self.items, &self.data_groups);
                 for group in groups.iter() {
                     if let Some((last, rest)) = group.indices.split_last() {
-                        let data = extract_metric_dimensions(tdo, group.collect.as_slice());
+                        let data = extract_metric_dimensions_with_target(
+                            tdo,
+                            group.collect.as_slice(),
+                            rule,
+                        );
                         for idx in rest {
                             items[*idx].record_end(rule, data.clone());
                         }
@@ -98,7 +184,11 @@ impl StatRecorder<Option<&DataRecord>> for MetricCollectors {
                 let (items, groups) = (&mut self.items, &self.data_groups);
                 for group in groups.iter() {
                     if let Some((last, rest)) = group.indices.split_last() {
-                        let data = extract_metric_dimensions(tdo, group.collect.as_slice());
+                        let data = extract_metric_dimensions_with_target(
+                            tdo,
+                            group.collect.as_slice(),
+                            rule,
+                        );
                         for idx in rest {
                             items[*idx].record_task(rule, data.clone());
                         }
@@ -156,6 +246,35 @@ impl StatRecorder<()> for MetricCollectors {
 }
 
 impl MetricCollectors {
+    pub fn has_pending_data(&self) -> bool {
+        self.items.iter().any(|c| !c.get_cache().is_empty())
+    }
+
+    pub fn touch_task_unit(&mut self, target: &str) {
+        for c in self.items.iter_mut() {
+            c.record_task_n_unit(target, 0);
+        }
+    }
+
+    pub fn touch_task_dim(&mut self, target: &str, dim: DataDim) {
+        for c in self.items.iter_mut() {
+            c.record_task_n(target, dim.clone(), 0);
+        }
+    }
+
+    pub fn touch_task_record(&mut self, target: &str, tdo: &DataRecord) {
+        for idx in 0..self.unit_collectors_end {
+            self.items[idx].record_task_n_unit(target, 0);
+        }
+        let (items, groups) = (&mut self.items, &self.data_groups);
+        for group in groups.iter() {
+            let data = extract_metric_dimensions_with_target(tdo, group.collect.as_slice(), target);
+            for idx in group.indices.iter() {
+                items[*idx].record_task_n(target, data.clone(), 0);
+            }
+        }
+    }
+
     /// Batch record helper for unit `()` dat_key: add `count` occurrences at once.
     pub fn record_task_batch(&mut self, target: &str, count: usize) {
         if count == 0 {
@@ -163,6 +282,74 @@ impl MetricCollectors {
         }
         for c in self.items.iter_mut() {
             c.record_task_n_unit(target, count);
+        }
+    }
+
+    /// Batch record helper for source metadata key counts.
+    ///
+    /// 当事件批次中存在 `access_ip` 等字符串键时，按键聚合计数并写入统计维度；
+    /// 对于缺少键的事件，回退到 unit 计数，保证总量不丢失。
+    pub fn record_task_batch_by_str_key(
+        &mut self,
+        target: &str,
+        key_counts: &HashMap<String, usize>,
+        total_count: usize,
+    ) {
+        if total_count == 0 {
+            return;
+        }
+        if key_counts.is_empty() {
+            self.record_task_batch(target, total_count);
+            return;
+        }
+
+        for collector in self.items.iter_mut() {
+            let mut tagged_total = 0usize;
+            for (key, cnt) in key_counts {
+                if *cnt == 0 {
+                    continue;
+                }
+                collector.record_task_n_str(target, key.as_str(), *cnt);
+                tagged_total += *cnt;
+            }
+            if tagged_total < total_count {
+                collector.record_task_n_unit(target, total_count - tagged_total);
+            }
+        }
+    }
+
+    /// Batch record helper for `(source_type, access_ip)` dimensions.
+    ///
+    /// 对于每个维度二元组做聚合计数；若存在缺失维度的事件，则回退到 unit 计数。
+    pub fn record_task_batch_by_source_ip(
+        &mut self,
+        target: &str,
+        pair_counts: &HashMap<(String, String), usize>,
+        total_count: usize,
+    ) {
+        if total_count == 0 {
+            return;
+        }
+        if pair_counts.is_empty() {
+            self.record_task_batch(target, total_count);
+            return;
+        }
+
+        for collector in self.items.iter_mut() {
+            let mut tagged_total = 0usize;
+            for ((source_type, access_ip), cnt) in pair_counts {
+                if *cnt == 0 {
+                    continue;
+                }
+                let mut dim = DataDim::with_capacity(2);
+                dim.push(Some(source_type.clone()));
+                dim.push(Some(access_ip.clone()));
+                collector.record_task_n(target, dim, *cnt);
+                tagged_total += *cnt;
+            }
+            if tagged_total < total_count {
+                collector.record_task_n_unit(target, total_count - tagged_total);
+            }
         }
     }
 

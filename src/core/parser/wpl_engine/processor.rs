@@ -180,6 +180,8 @@ mod tests {
             let pipeline = WplPipeline::new(
                 idx,
                 key.to_string(),
+                "pkg".to_string(),
+                key.to_string(),
                 Vec::new(),
                 evaluator,
                 vec![SinkGroupAgent::null()],

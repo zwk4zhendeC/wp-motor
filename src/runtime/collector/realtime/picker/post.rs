@@ -8,8 +8,44 @@ use crate::runtime::actor::command::TaskController;
 use crate::runtime::parser::workflow::ParseDispatchResult;
 use crate::sample_log_with_hits;
 use crate::stat::metric_collect::MetricCollectors;
+use std::collections::HashMap;
 // stride uses crate::LOG_SAMPLE_STRIDE globally; no per-site stride import here
 use wp_connector_api::SourceBatch;
+
+const KNOWN_SOURCE_TYPES: [&str; 5] = ["syslog", "tcp", "udp", "kafka", "file"];
+
+fn normalize_source_type(raw: &str) -> Option<&'static str> {
+    KNOWN_SOURCE_TYPES
+        .iter()
+        .copied()
+        .find(|candidate| raw.eq_ignore_ascii_case(candidate))
+}
+
+fn resolve_source_type(src_key: &str, event: &wp_connector_api::SourceEvent) -> String {
+    // 优先级：
+    // 1) 显式 source_type 标签（最可信）；
+    // 2) access_source 的标准化映射；
+    // 3) source key 前缀兜底；
+    // 4) unknown。
+    if let Some(v) = event.tags.get("source_type").filter(|v| !v.is_empty()) {
+        return v.to_string();
+    }
+    if let Some(v) = event
+        .tags
+        .get("access_source")
+        .and_then(|v| normalize_source_type(v))
+    {
+        return v.to_string();
+    }
+
+    let lower = src_key.to_ascii_lowercase();
+    KNOWN_SOURCE_TYPES
+        .iter()
+        .copied()
+        .find(|prefix| lower.starts_with(prefix))
+        .unwrap_or("unknown")
+        .to_string()
+}
 
 // 轻量背压观测：按固定步长抽样打印（宏内部维护静态计数器）
 /// Picker state and constructor.
@@ -48,6 +84,20 @@ impl JMActPicker {
             };
 
             let event_cnt = payload.len();
+            // 预分配容量，降低大批次下 HashMap 扩容成本。
+            let mut source_ip_counts: HashMap<(String, String), usize> =
+                HashMap::with_capacity(event_cnt);
+            for event in &payload {
+                let access_ip = event
+                    .tags
+                    .get("access_ip")
+                    .map(|ip| ip.to_string())
+                    .or_else(|| event.ups_ip.map(|ip| ip.to_string()));
+                if let Some(ip) = access_ip {
+                    let source_type = resolve_source_type(src_key, event);
+                    *source_ip_counts.entry((source_type, ip)).or_insert(0) += 1;
+                }
+            }
             let mut pending_payload = Some(payload);
             let Some(batch_to_send) = pending_payload.take() else {
                 return rs;
@@ -55,7 +105,7 @@ impl JMActPicker {
 
             match self.parse_router().try_send_round_robin(batch_to_send) {
                 ParseDispatchResult::Sent => {
-                    stat_ext.record_task_batch(src_key, event_cnt);
+                    stat_ext.record_task_batch_by_source_ip(src_key, &source_ip_counts, event_cnt);
                     rs.add_proc(1);
                     task_ctrl.rec_task_suc_cnt(event_cnt);
                     delivered += 1;

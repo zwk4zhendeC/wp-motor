@@ -34,6 +34,8 @@ pub fn multi_code_ins_parse_units(
         let ppu = WplPipeline::new(
             idx.checkin(wpl_path.as_str()),
             wpl_path,
+            lang_pkg.name.to_string(),
+            rule.name().to_string(),
             funcs,
             parser,
             agent,
@@ -59,6 +61,8 @@ pub fn code_ins_parse_units(
         let ppu = WplPipeline::new(
             idx.checkin(wpl_path.as_str()),
             wpl_path,
+            lang_pkg.name.to_string(),
+            rule.name().to_string(),
             funcs,
             parser,
             agent,

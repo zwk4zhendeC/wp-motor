@@ -549,6 +549,7 @@ impl UdpSyslogSource {
                     // Create tags with access_ip
                     let mut stags = self.tags.clone();
                     stags.set("access_ip", addr.ip().to_string());
+                    stags.set("wp_access_ip", addr.ip().to_string());
 
                     // Create SourceEvent with raw payload
                     let mut event =
@@ -603,6 +604,7 @@ impl UdpSyslogSource {
 
                     let mut stags = self.tags.clone();
                     stags.set("access_ip", addr.ip().to_string());
+                    stags.set("wp_access_ip", addr.ip().to_string());
 
                     let mut event =
                         SourceEvent::new(next_event_id(), &self.key, payload, Arc::new(stags));
@@ -769,6 +771,7 @@ impl UdpSyslogSource {
 
             let mut stags = self.tags.clone();
             stags.set("access_ip", addr.ip().to_string());
+            stags.set("wp_access_ip", addr.ip().to_string());
 
             let mut event = SourceEvent::new(next_event_id(), &self.key, payload, Arc::new(stags));
             event.ups_ip = Some(addr.ip());

@@ -48,6 +48,23 @@ pub struct SourceConfigParser {
 }
 
 impl SourceConfigParser {
+    fn has_tag_key(tags: &[String], key: &str) -> bool {
+        tags.iter().any(|tag| {
+            tag.split_once(':')
+                .map(|(k, _)| k.trim() == key)
+                .unwrap_or(false)
+        })
+    }
+
+    fn ensure_source_type_tag(resolved: &mut wp_connector_api::SourceSpec) {
+        // 为下游统计补齐基础维度：若用户未显式配置 wp_source_type，则按 kind 注入。
+        if !Self::has_tag_key(&resolved.tags, "wp_source_type") {
+            resolved
+                .tags
+                .push(format!("wp_source_type:{}", resolved.kind.as_str()));
+        }
+    }
+
     async fn build_from_specs_with_ids(
         &self,
         specs: Vec<SourceInstanceConf>,
@@ -58,7 +75,8 @@ impl SourceConfigParser {
         for item in specs {
             let core: wp_specs::CoreSourceSpec = (&item).into();
             let connector_id = item.connector_id.clone().unwrap_or_default();
-            let resolved = core_to_resolved_with(&core, connector_id);
+            let mut resolved = core_to_resolved_with(&core, connector_id);
+            Self::ensure_source_type_tag(&mut resolved);
             let fac = registry::get_source_factory(&resolved.kind)
                 .ok_or_else(|| ConfIOReason::from_validation().to_err())?;
             let svc = fac

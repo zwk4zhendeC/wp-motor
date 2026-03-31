@@ -155,6 +155,8 @@ mod tests {
         let mut pipeline = WplPipeline::new(
             idx,
             format!("rule-{}", idx),
+            "pkg".to_string(),
+            format!("rule-{}", idx),
             Vec::new(),
             parser,
             vec![SinkGroupAgent::null()],

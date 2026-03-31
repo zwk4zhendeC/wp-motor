@@ -240,11 +240,10 @@ impl StatCollector {
 
     /// Batch record helper: add `n` occurrences as successful completions at once.
     fn rec_beg_end_n_impl(&mut self, dim: &StatDim, n: usize) {
-        if n == 0 {
-            return;
-        }
         let rec = self.get_or_create_record(dim);
-        rec.rec_beg_end_n(n);
+        if n > 0 {
+            rec.rec_beg_end_n(n);
+        }
     }
 
     fn rec_beg_unit_impl(&mut self, rule_key: &str) {

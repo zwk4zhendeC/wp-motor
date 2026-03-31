@@ -34,6 +34,10 @@ pub fn load_warp_engine_confs(
 const TOP_N: usize = 20;
 pub fn stat_reqs_from(conf: &StatConf) -> StatRequires {
     // 将新结构 [[stat.<stage>]] 映射为运行期 StatReq
+    const PICK_DEFAULT_FIELDS: [&str; 2] = ["wp_source_type", "wp_access_ip"];
+    const PARSE_DEFAULT_FIELDS: [&str; 2] = ["wp_package_name", "wp_rule_name"];
+    const SINK_DEFAULT_FIELDS: [&str; 2] = ["wp_sink_group", "wp_sink_name"];
+
     fn map_target(t: &str) -> StatTarget {
         match t.trim() {
             "*" => StatTarget::All,
@@ -42,33 +46,67 @@ pub fn stat_reqs_from(conf: &StatConf) -> StatRequires {
         }
     }
 
+    fn collect_or_default(fields: &[String], defaults: &[&str]) -> Vec<String> {
+        // 用户未配置 fields 时，使用阶段默认维度作为起始集合。
+        if fields.is_empty() {
+            defaults.iter().map(|x| (*x).to_string()).collect()
+        } else {
+            fields.to_vec()
+        }
+    }
+
+    fn ensure_required_fields(mut fields: Vec<String>, required_fields: &[&str]) -> Vec<String> {
+        // 长期监控依赖的维度无条件补齐（去重），不受用户 fields 覆盖影响。
+        for req in required_fields {
+            if !fields.iter().any(|f| f == req) {
+                fields.push((*req).to_string());
+            }
+        }
+        fields
+    }
+
+    fn push_stage_reqs(
+        out: &mut Vec<StatReq>,
+        stage: StatStage,
+        items: &[wp_conf::stat::StatItem],
+        stage_fields: &[&str],
+    ) {
+        for it in items {
+            out.push(StatReq {
+                stage: stage.clone(),
+                name: it.key.clone(),
+                target: map_target(it.target.as_str()),
+                // 先走“用户配置或默认值”，再强制补齐阶段必需维度。
+                collect: ensure_required_fields(
+                    collect_or_default(&it.fields, stage_fields),
+                    stage_fields,
+                ),
+                max: it.top_n.unwrap_or(TOP_N),
+            });
+        }
+    }
+
     let mut requs = Vec::new();
-    for it in conf.pick.clone() {
-        requs.push(StatReq {
-            stage: StatStage::Pick,
-            name: it.key,
-            target: map_target(it.target.as_str()),
-            collect: it.fields,
-            max: it.top_n.unwrap_or(TOP_N),
-        });
-    }
-    for it in conf.parse.clone() {
-        requs.push(StatReq {
-            stage: StatStage::Parse,
-            name: it.key,
-            target: map_target(it.target.as_str()),
-            collect: it.fields,
-            max: it.top_n.unwrap_or(TOP_N),
-        });
-    }
-    for it in conf.sink.clone() {
-        requs.push(StatReq {
-            stage: StatStage::Sink,
-            name: it.key,
-            target: map_target(it.target.as_str()),
-            collect: it.fields,
-            max: it.top_n.unwrap_or(TOP_N),
-        });
-    }
+    push_stage_reqs(
+        &mut requs,
+        StatStage::Pick,
+        &conf.pick,
+        &PICK_DEFAULT_FIELDS,
+        // pick 监控长期依赖 wp_source_type/wp_access_ip 维度：即使用户显式配置 fields，也强制补齐。
+    );
+    push_stage_reqs(
+        &mut requs,
+        StatStage::Parse,
+        &conf.parse,
+        &PARSE_DEFAULT_FIELDS,
+        // parse 监控长期依赖 wp_package_name/wp_rule_name 维度：即使用户显式配置 fields，也强制补齐。
+    );
+    push_stage_reqs(
+        &mut requs,
+        StatStage::Sink,
+        &conf.sink,
+        &SINK_DEFAULT_FIELDS,
+        // sink 监控长期依赖 wp_sink_group/wp_sink_name 维度：即使用户显式配置 fields，也强制补齐。
+    );
     StatRequires::from(requs)
 }

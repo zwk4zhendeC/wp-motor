@@ -63,7 +63,6 @@ impl Oml {
         let initializer = TemplateInitializer::new(oml_dir.clone());
 
         let example_oml_content = include_str!("../example/oml/nginx.oml");
-
         initializer.write_files(&[("example.oml", example_oml_content)])?;
 
         println!("Created example OML files:");

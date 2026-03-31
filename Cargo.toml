@@ -54,7 +54,7 @@ members = [
 ]
 
 [workspace.package]
-version = "1.19.12" # @gxl:set(version)
+version = "1.19.14" # @gxl:set(version)
 edition = "2024"
 license = "Apache-2.0"
 
@@ -75,15 +75,12 @@ license = "Apache-2.0"
 # --- System & Platform ---
 sysinfo = { workspace = true }
 libc = { workspace = true }
-hostname = { workspace = true }
 socket2 = { workspace = true }
 async-signal = { workspace = true }
 smol_str = { workspace = true }
-signal-hook-registry = { workspace = true }
 
 # --- Async Runtime & Concurrency ---
 tokio = { workspace = true }
-tokio-util = { workspace = true }
 tokio-async-drop = { workspace = true }
 futures-util = { workspace = true }
 futures-lite = { workspace = true }
@@ -254,7 +251,7 @@ normal = ["ctor"]
 
 [workspace.dependencies]
 # --- Async Runtime ---
-tokio = { version = "1.48", features = ["full"] }
+tokio = { version = "1.50", features = ["full"] }
 async-trait = "0.1"
 futures-util = "0.3"
 smol_str = { version = "0.3", features = ["serde"] }
@@ -273,7 +270,7 @@ env_logger = "0.11"
 orion-error = "0.6"
 
 # --- Parsing & Text ---
-winnow = "0.7"
+winnow = "1.0"
 regex = "1.12"
 wildmatch = "2.6"
 strfmt = "0.2"
@@ -288,13 +285,8 @@ hex = "0.4"
 ipnet = "2.11"
 glob = "0.3"
 rand = "0.10"
-rand_distr = "0.6"
-ordered-float = "5.1"
 lru = "0.16"
-arrayvec = "0.7"
 smallvec = "1.15"
-unicode-segmentation = "1.12"
-ahash = "0.8"
 
 # --- Code Generation & Macros ---
 derive_more = "2.1"
@@ -310,21 +302,17 @@ strum = "0.27"
 strum_macros = "0.27"
 parse-display = "0.10"
 parse-display-derive = "0.10"
-ctor = "0.6"
+ctor = "0.8"
 
 # --- System & Platform ---
 arcstr = "1.2"
 walkdir = "2.5"
 libc = "0.2"
-hostname = "0.4"
 socket2 = "0.6"
 async-signal = "0.2"
-signal-hook-registry = "1.4"
-getrandom = { version = "0.4" }
 sysinfo = "0.38"
 
 # --- Async Runtime & Concurrency ---
-tokio-util = { version = "0.7", features = ["full"] }
 tokio-async-drop = "0.1"
 futures-lite = "2.6"
 async-broadcast = "0.7"
@@ -338,40 +326,24 @@ comfy-table = "7.2"
 shadow-rs = { version = "1.5.0", default-features = false }
 
 # --- Database ---
-rusqlite = { version = "0.32.1", features = ["backup", "functions"] }
-r2d2 = "0.8"
-r2d2_sqlite = "0.25"
-
-# --- Web & Network ---
 url = "2.5"
-mailchecker = "6.0"
-idcard = "0.3"
-phone = "0.1"
 html-escape = "0.2"
 escape8259 = "0.5"
 imap-types = "1.0"
 
 # --- Text Processing & Format ---
-csv = "1.4"
 md5 = "0.8"
 encoding_rs = "0.8"
-similar = "2.7"
 
 # --- Cryptography ---
-rust-crypto = "0.2"
-
-# --- Configuration ---
 orion_conf = { version = "0.5", features = ["yaml", "toml"] }
 orion-sec = "0.4"
 orion-variate = "0.11"
 
 # --- Testing ---
 criterion = "0.8"
-tokio-test = "0.4"
 mockall = "0.14"
 tempfile = "3.23"
-serial_test = "3"
-httpmock = "0.8"
 collection_literals = "1.0"
 arbitrary = { version = "1.4", features = ["derive"] }
 libfuzzer-sys = "0.4"
@@ -380,16 +352,14 @@ libfuzzer-sys = "0.4"
 # --- Internal: Core Crates ---
 orion_overload = { path = "./crates/orion_overload" }
 orion_exp = { path = "./crates/orion_exp" }
-wp_primitives = { package = "wp-primitives", version = "0.1" }
-wp_condition = { package = "wp-condition", path = "./crates/wp-condition" }
-wp_cli_core = { package = "wp-cli-core", path = "./crates/wp-cli-core" }
+wp_primitives = { package = "wp-primitives", version = "0.2" }
 wp_config = { package = "wp-config", path = "./crates/wp-config" }
 wp_data_model = { package = "wp-data-utils", path = "./crates/wp-data-utils" }
-wp_knowledge = { package = "wp-knowledge", version = "0.11" }
+wp-knowledge = { package = "wp-knowledge", path = "../wp-knowledge" }
+wp_knowledge = { package = "wp-knowledge", path = "../wp-knowledge" }
 wp_lang = { package = "wp-lang", version = "0.1" }
 wp_oml = { package = "wp-oml", path = "./crates/wp-oml" }
 wp_proj = { package = "wp-proj", path = "./crates/wp-proj" }
-wp_stats = { package = "wp-stats", path = "./crates/wp-stats" }
 wp_core_connectors = { package = "wp-core-connectors", version = "0.1" }
 
 # --- External: Arrow ---

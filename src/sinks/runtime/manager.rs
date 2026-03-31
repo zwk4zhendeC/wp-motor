@@ -171,12 +171,38 @@ impl SinkRuntime {
     }
 
     pub async fn send_stat(&mut self, mon_send: &MonSend) -> SinkResult<()> {
+        if !self.normal_stat.has_pending_data() {
+            if let Some((group, sink)) = self.name.split_once('/') {
+                // 对 name=group/sink 的场景补齐结构化维度，便于看板聚合。
+                let rec = DataRecord::from(vec![
+                    DataField::from_chars("wp_sink_group", group),
+                    DataField::from_chars("wp_sink_name", sink),
+                ]);
+                self.normal_stat.touch_task_record(self.name.as_str(), &rec);
+            } else {
+                self.normal_stat.touch_task_unit(self.name.as_str());
+            }
+        }
         self.normal_stat
             .send_stat(mon_send)
             .await
             .owe_sys()
             .want("sink stat")?;
         if self.backup_used {
+            let backup_name = format!("{}_bak", self.name);
+            if !self.backup_stat.has_pending_data() {
+                if let Some((group, sink)) = backup_name.split_once('/') {
+                    // backup sink 与主 sink 采用同一维度规则，避免口径不一致。
+                    let rec = DataRecord::from(vec![
+                        DataField::from_chars("wp_sink_group", group),
+                        DataField::from_chars("wp_sink_name", sink),
+                    ]);
+                    self.backup_stat
+                        .touch_task_record(backup_name.as_str(), &rec);
+                } else {
+                    self.backup_stat.touch_task_unit(backup_name.as_str());
+                }
+            }
             self.backup_stat
                 .send_stat(mon_send)
                 .await

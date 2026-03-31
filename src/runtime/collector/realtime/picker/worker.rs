@@ -250,6 +250,11 @@ impl SourceWorker {
                     rt_name,
                     self.picker.pending_count()
                 );
+                if !stat_ext.has_pending_data() {
+                    // 本周期无新增数据时也触发一次 unit 桶，避免监控侧“断点”。
+                    let source_id = source.identifier();
+                    stat_ext.touch_task_unit(source_id.as_str());
+                }
                 info_mtrc!(
                     "{} pick-pending bytes: {}",
                     rt_name,
@@ -266,6 +271,11 @@ impl SourceWorker {
             if !sleep_dur.is_zero() {
                 sleep(sleep_dur).await;
             }
+        }
+        if !stat_ext.has_pending_data() {
+            // 退出前做同样的兜底触发，确保最后一个周期仍有可观测数据。
+            let source_id = source.identifier();
+            stat_ext.touch_task_unit(source_id.as_str());
         }
         stat_ext
             .send_stat(&self.mon_s)

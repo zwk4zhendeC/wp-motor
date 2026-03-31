@@ -318,6 +318,7 @@ impl TcpSyslogSource {
                 && let Some(ip) = event.ups_ip
             {
                 Arc::make_mut(&mut event.tags).set("access_ip", ip.to_string());
+                Arc::make_mut(&mut event.tags).set("wp_access_ip", ip.to_string());
             }
             // 复用预处理闭包，降低分配
             if self.strip_header || self.attach_meta_tags {

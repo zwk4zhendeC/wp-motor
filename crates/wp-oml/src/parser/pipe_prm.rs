@@ -299,40 +299,68 @@ pub fn oml_aga_pipe_noprefix(data: &mut &str) -> WResult<PreciseEvaluator> {
 pub fn oml_pipe(data: &mut &str) -> WResult<PipeFun> {
     symbol_pipe.parse_next(data)?;
     multispace0.parse_next(data)?;
-    let fun = alt((
-        alt((
-            parser::call_fun_args2::<TimeToTsZone>.map(PipeFun::TimeToTsZone),
-            parser::call_fun_args1::<Nth>.map(PipeFun::Nth),
-            parser::call_fun_args1::<Get>.map(PipeFun::Get),
-            parser::call_fun_args1::<StartsWith>.map(PipeFun::StartsWith),
-            parser::call_fun_args1::<MapTo>.map(PipeFun::MapTo),
-            parser::call_fun_args1::<Base64Decode>.map(PipeFun::Base64Decode),
-            parser::call_fun_args1::<PathGet>.map(PipeFun::PathGet),
-            parser::call_fun_args1::<UrlGet>.map(PipeFun::UrlGet),
-        )),
-        alt((
-            PIPE_HTML_ESCAPE.map(|_| PipeFun::HtmlEscape(HtmlEscape::default())),
-            PIPE_HTML_UNESCAPE.map(|_| PipeFun::HtmlUnescape(HtmlUnescape::default())),
-            PIPE_STR_ESCAPE.map(|_| PipeFun::StrEscape(StrEscape::default())),
-            PIPE_JSON_ESCAPE.map(|_| PipeFun::JsonEscape(JsonEscape::default())),
-            PIPE_JSON_UNESCAPE.map(|_| PipeFun::JsonUnescape(JsonUnescape::default())),
-            PIPE_BASE64_ENCODE.map(|_| PipeFun::Base64Encode(Base64Encode::default())),
-            PIPE_TIME_TO_TS_MS.map(|_| PipeFun::TimeToTsMs(TimeToTsMs::default())),
-            PIPE_TIME_TO_TS_US.map(|_| PipeFun::TimeToTsUs(TimeToTsUs::default())),
-            PIPE_TIME_TO_TS.map(|_| PipeFun::TimeToTs(TimeToTs::default())),
-            PIPE_TO_JSON.map(|_| PipeFun::ToJson(ToJson::default())),
-            PIPE_TO_STR.map(|_| PipeFun::ToStr(ToStr::default())),
-            PIPE_SKIP_EMPTY.map(|_| PipeFun::SkipEmpty(SkipEmpty::default())),
-            PIPE_IP4_TO_INT.map(|_| PipeFun::Ip4ToInt(Ip4ToInt::default())),
-            PIPE_EXTRACT_MAIN_WORD.map(|_| PipeFun::ExtractMainWord(ExtractMainWord::default())),
-            PIPE_EXTRACT_SUBJECT_OBJECT
-                .map(|_| PipeFun::ExtractSubjectObject(ExtractSubjectObject::default())),
-        )),
-    ))
+    let fun = alt((pipe_fun_with_args, pipe_fun_simple))
     .context(StrContext::Label("pipe fun"))
     .context(ctx_desc("fun not found!"))
     .parse_next(data)?;
     Ok(fun)
+}
+
+fn pipe_fun_with_args(data: &mut &str) -> WResult<PipeFun> {
+    alt((
+        parser::call_fun_args2::<TimeToTsZone>.map(PipeFun::TimeToTsZone),
+        parser::call_fun_args1::<Nth>.map(PipeFun::Nth),
+        parser::call_fun_args1::<Get>.map(PipeFun::Get),
+        parser::call_fun_args1::<StartsWith>.map(PipeFun::StartsWith),
+        parser::call_fun_args1::<MapTo>.map(PipeFun::MapTo),
+        parser::call_fun_args1::<Base64Decode>.map(PipeFun::Base64Decode),
+        parser::call_fun_args1::<PathGet>.map(PipeFun::PathGet),
+        parser::call_fun_args1::<UrlGet>.map(PipeFun::UrlGet),
+    ))
+    .parse_next(data)
+}
+
+fn pipe_fun_simple(data: &mut &str) -> WResult<PipeFun> {
+    alt((
+        pipe_fun_simple_core_a,
+        pipe_fun_simple_core_b,
+        pipe_fun_simple_extra,
+    ))
+    .parse_next(data)
+}
+
+fn pipe_fun_simple_core_a(data: &mut &str) -> WResult<PipeFun> {
+    alt((
+        PIPE_HTML_ESCAPE.map(|_| PipeFun::HtmlEscape(HtmlEscape::default())),
+        PIPE_HTML_UNESCAPE.map(|_| PipeFun::HtmlUnescape(HtmlUnescape::default())),
+        PIPE_STR_ESCAPE.map(|_| PipeFun::StrEscape(StrEscape::default())),
+        PIPE_JSON_ESCAPE.map(|_| PipeFun::JsonEscape(JsonEscape::default())),
+        PIPE_JSON_UNESCAPE.map(|_| PipeFun::JsonUnescape(JsonUnescape::default())),
+    ))
+    .parse_next(data)
+}
+
+fn pipe_fun_simple_core_b(data: &mut &str) -> WResult<PipeFun> {
+    alt((
+        PIPE_BASE64_ENCODE.map(|_| PipeFun::Base64Encode(Base64Encode::default())),
+        PIPE_TIME_TO_TS_MS.map(|_| PipeFun::TimeToTsMs(TimeToTsMs::default())),
+        PIPE_TIME_TO_TS_US.map(|_| PipeFun::TimeToTsUs(TimeToTsUs::default())),
+        PIPE_TIME_TO_TS.map(|_| PipeFun::TimeToTs(TimeToTs::default())),
+        PIPE_TO_JSON.map(|_| PipeFun::ToJson(ToJson::default())),
+    ))
+    .parse_next(data)
+}
+
+fn pipe_fun_simple_extra(data: &mut &str) -> WResult<PipeFun> {
+    alt((
+        PIPE_TO_STR.map(|_| PipeFun::ToStr(ToStr::default())),
+        PIPE_SKIP_EMPTY.map(|_| PipeFun::SkipEmpty(SkipEmpty::default())),
+        PIPE_IP4_TO_INT.map(|_| PipeFun::Ip4ToInt(Ip4ToInt::default())),
+        PIPE_EXTRACT_MAIN_WORD.map(|_| PipeFun::ExtractMainWord(ExtractMainWord::default())),
+        PIPE_EXTRACT_SUBJECT_OBJECT
+            .map(|_| PipeFun::ExtractSubjectObject(ExtractSubjectObject::default())),
+    ))
+    .parse_next(data)
 }
 
 #[cfg(test)]

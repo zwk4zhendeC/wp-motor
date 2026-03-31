@@ -371,6 +371,7 @@ impl ConnectionManager {
     ) -> SourceEvent {
         // Add access_ip tag
         base_stags.set("access_ip", client_ip.to_string());
+        base_stags.set("wp_access_ip", client_ip.to_string());
 
         // Create zero-copy payload using Arc
         let payload_arc = Arc::from(data.to_vec());

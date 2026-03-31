@@ -23,11 +23,11 @@ fn normalize_source_type(raw: &str) -> Option<&'static str> {
 
 fn resolve_source_type(src_key: &str, event: &wp_connector_api::SourceEvent) -> String {
     // 优先级：
-    // 1) 显式 source_type 标签（最可信）；
+    // 1) 显式 wp_source_type 标签（最可信）；
     // 2) access_source 的标准化映射；
     // 3) source key 前缀兜底；
     // 4) unknown。
-    if let Some(v) = event.tags.get("source_type").filter(|v| !v.is_empty()) {
+    if let Some(v) = event.tags.get("wp_source_type").filter(|v| !v.is_empty()) {
         return v.to_string();
     }
     if let Some(v) = event
@@ -90,7 +90,7 @@ impl JMActPicker {
             for event in &payload {
                 let access_ip = event
                     .tags
-                    .get("access_ip")
+                    .get("wp_access_ip")
                     .map(|ip| ip.to_string())
                     .or_else(|| event.ups_ip.map(|ip| ip.to_string()));
                 if let Some(ip) = access_ip {

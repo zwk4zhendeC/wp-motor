@@ -29,7 +29,7 @@ pub struct WplPipeline {
     s_name: String,
     package_name: String,
     rule_name: String,
-    // 仅当统计请求显式包含 package_name/rule_name 时开启。
+    // 仅当统计请求显式包含 wp_package_name/wp_rule_name 时开启。
     // 这样可避免默认路径上每条数据都做额外字段构造与拷贝。
     stat_need_pkg_rule: bool,
     stat_ext: MetricCollectors,
@@ -52,7 +52,7 @@ impl WplPipeline {
         let stat_need_pkg_rule = stat_reqs.iter().any(|r| {
             r.collect
                 .iter()
-                .any(|f| matches!(f.as_str(), "package_name" | "rule_name"))
+                .any(|f| matches!(f.as_str(), "wp_package_name" | "wp_rule_name"))
         });
         let stat_ext = MetricCollectors::new(wpl_key.clone(), stat_reqs);
 
@@ -95,8 +95,8 @@ impl WplPipeline {
                 if self.stat_need_pkg_rule {
                     // begin 阶段使用稳定维度，避免因 record 尚未填充导致分组漂移。
                     let stat_begin = DataRecord::from(vec![
-                        DataField::from_chars("package_name", self.package_name.as_str()),
-                        DataField::from_chars("rule_name", self.rule_name.as_str()),
+                        DataField::from_chars("wp_package_name", self.package_name.as_str()),
+                        DataField::from_chars("wp_rule_name", self.rule_name.as_str()),
                     ]);
                     self.stat_ext
                         .record_begin(self.wpl_key.as_str(), Some(&stat_begin));
@@ -109,15 +109,17 @@ impl WplPipeline {
                 if self.stat_need_pkg_rule {
                     // end 阶段优先保留 record 中已有字段；缺失时再回填默认值。
                     let mut stat_end = record.clone();
-                    if stat_end.field("package_name").is_none() {
+                    if stat_end.field("wp_package_name").is_none() {
                         stat_end.append(DataField::from_chars(
-                            "package_name",
+                            "wp_package_name",
                             self.package_name.as_str(),
                         ));
                     }
-                    if stat_end.field("rule_name").is_none() {
-                        stat_end
-                            .append(DataField::from_chars("rule_name", self.rule_name.as_str()));
+                    if stat_end.field("wp_rule_name").is_none() {
+                        stat_end.append(DataField::from_chars(
+                            "wp_rule_name",
+                            self.rule_name.as_str(),
+                        ));
                     }
                     self.stat_ext
                         .record_end(self.wpl_key.as_str(), Some(&stat_end));
@@ -135,8 +137,8 @@ impl WplPipeline {
             if self.stat_need_pkg_rule {
                 // 空闲周期也触发维度桶，保证监控面板维度连续可见。
                 let rec = DataRecord::from(vec![
-                    DataField::from_chars("package_name", self.package_name.as_str()),
-                    DataField::from_chars("rule_name", self.rule_name.as_str()),
+                    DataField::from_chars("wp_package_name", self.package_name.as_str()),
+                    DataField::from_chars("wp_rule_name", self.rule_name.as_str()),
                 ]);
                 self.stat_ext.touch_task_record(self.wpl_key.as_str(), &rec);
             } else {

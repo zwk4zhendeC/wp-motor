@@ -57,11 +57,11 @@ impl SourceConfigParser {
     }
 
     fn ensure_source_type_tag(resolved: &mut wp_connector_api::SourceSpec) {
-        // 为下游统计补齐基础维度：若用户未显式配置 source_type，则按 kind 注入。
-        if !Self::has_tag_key(&resolved.tags, "source_type") {
+        // 为下游统计补齐基础维度：若用户未显式配置 wp_source_type，则按 kind 注入。
+        if !Self::has_tag_key(&resolved.tags, "wp_source_type") {
             resolved
                 .tags
-                .push(format!("source_type:{}", resolved.kind.as_str()));
+                .push(format!("wp_source_type:{}", resolved.kind.as_str()));
         }
     }
 

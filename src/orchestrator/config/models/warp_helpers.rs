@@ -34,9 +34,9 @@ pub fn load_warp_engine_confs(
 const TOP_N: usize = 20;
 pub fn stat_reqs_from(conf: &StatConf) -> StatRequires {
     // 将新结构 [[stat.<stage>]] 映射为运行期 StatReq
-    const PICK_DEFAULT_FIELDS: [&str; 2] = ["source_type", "access_ip"];
-    const PARSE_DEFAULT_FIELDS: [&str; 2] = ["package_name", "rule_name"];
-    const SINK_DEFAULT_FIELDS: [&str; 2] = ["sink_group", "sink_name"];
+    const PICK_DEFAULT_FIELDS: [&str; 2] = ["wp_source_type", "wp_access_ip"];
+    const PARSE_DEFAULT_FIELDS: [&str; 2] = ["wp_package_name", "wp_rule_name"];
+    const SINK_DEFAULT_FIELDS: [&str; 2] = ["wp_sink_group", "wp_sink_name"];
 
     fn map_target(t: &str) -> StatTarget {
         match t.trim() {
@@ -92,21 +92,21 @@ pub fn stat_reqs_from(conf: &StatConf) -> StatRequires {
         StatStage::Pick,
         &conf.pick,
         &PICK_DEFAULT_FIELDS,
-        // pick 监控长期依赖 source_type/access_ip 维度：即使用户显式配置 fields，也强制补齐。
+        // pick 监控长期依赖 wp_source_type/wp_access_ip 维度：即使用户显式配置 fields，也强制补齐。
     );
     push_stage_reqs(
         &mut requs,
         StatStage::Parse,
         &conf.parse,
         &PARSE_DEFAULT_FIELDS,
-        // parse 监控长期依赖 package/rule 维度：即使用户显式配置 fields，也强制补齐。
+        // parse 监控长期依赖 wp_package_name/wp_rule_name 维度：即使用户显式配置 fields，也强制补齐。
     );
     push_stage_reqs(
         &mut requs,
         StatStage::Sink,
         &conf.sink,
         &SINK_DEFAULT_FIELDS,
-        // sink 监控长期依赖 sink_group/sink_name 维度：即使用户显式配置 fields，也强制补齐。
+        // sink 监控长期依赖 wp_sink_group/wp_sink_name 维度：即使用户显式配置 fields，也强制补齐。
     );
     StatRequires::from(requs)
 }

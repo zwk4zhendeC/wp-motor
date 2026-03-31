@@ -175,8 +175,8 @@ impl SinkRuntime {
             if let Some((group, sink)) = self.name.split_once('/') {
                 // 对 name=group/sink 的场景补齐结构化维度，便于看板聚合。
                 let rec = DataRecord::from(vec![
-                    DataField::from_chars("sink_group", group),
-                    DataField::from_chars("sink_name", sink),
+                    DataField::from_chars("wp_sink_group", group),
+                    DataField::from_chars("wp_sink_name", sink),
                 ]);
                 self.normal_stat.touch_task_record(self.name.as_str(), &rec);
             } else {
@@ -194,8 +194,8 @@ impl SinkRuntime {
                 if let Some((group, sink)) = backup_name.split_once('/') {
                     // backup sink 与主 sink 采用同一维度规则，避免口径不一致。
                     let rec = DataRecord::from(vec![
-                        DataField::from_chars("sink_group", group),
-                        DataField::from_chars("sink_name", sink),
+                        DataField::from_chars("wp_sink_group", group),
+                        DataField::from_chars("wp_sink_name", sink),
                     ]);
                     self.backup_stat
                         .touch_task_record(backup_name.as_str(), &rec);

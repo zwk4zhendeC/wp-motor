@@ -40,27 +40,39 @@ fn extract_metric_dimensions_with_target(
     let parsed_target = target.rsplit_once('/');
     for key in collects {
         match key.as_str() {
-            "package_name" => {
+            "wp_source_type" => {
                 let value = tdo
-                    .field("package_name")
+                    .field("wp_source_type")
+                    .map(|x| formatter.fmt_field(x).to_string());
+                data.push(value);
+            }
+            "wp_access_ip" => {
+                let value = tdo
+                    .field("wp_access_ip")
+                    .map(|x| formatter.fmt_field(x).to_string());
+                data.push(value);
+            }
+            "wp_package_name" => {
+                let value = tdo
+                    .field("wp_package_name")
                     .map(|x| formatter.fmt_field(x).to_string());
                 data.push(value.or_else(|| parsed_target.map(|(pkg, _)| pkg.to_string())));
             }
-            "rule_name" => {
+            "wp_rule_name" => {
                 let value = tdo
-                    .field("rule_name")
+                    .field("wp_rule_name")
                     .map(|x| formatter.fmt_field(x).to_string());
                 data.push(value.or_else(|| parsed_target.map(|(_, rule)| rule.to_string())));
             }
-            "sink_group" => {
+            "wp_sink_group" => {
                 let value = tdo
-                    .field("sink_group")
+                    .field("wp_sink_group")
                     .map(|x| formatter.fmt_field(x).to_string());
                 data.push(value.or_else(|| parsed_target.map(|(group, _)| group.to_string())));
             }
-            "sink_name" => {
+            "wp_sink_name" => {
                 let value = tdo
-                    .field("sink_name")
+                    .field("wp_sink_name")
                     .map(|x| formatter.fmt_field(x).to_string());
                 data.push(value.or_else(|| parsed_target.map(|(_, name)| name.to_string())));
             }
@@ -78,10 +90,10 @@ fn extract_metric_dimensions_from_target_only(collects: &[String], target: &str)
     let parsed_target = target.rsplit_once('/');
     for key in collects {
         match key.as_str() {
-            "package_name" => data.push(parsed_target.map(|(pkg, _)| pkg.to_string())),
-            "rule_name" => data.push(parsed_target.map(|(_, rule)| rule.to_string())),
-            "sink_group" => data.push(parsed_target.map(|(group, _)| group.to_string())),
-            "sink_name" => data.push(parsed_target.map(|(_, name)| name.to_string())),
+            "wp_package_name" => data.push(parsed_target.map(|(pkg, _)| pkg.to_string())),
+            "wp_rule_name" => data.push(parsed_target.map(|(_, rule)| rule.to_string())),
+            "wp_sink_group" => data.push(parsed_target.map(|(group, _)| group.to_string())),
+            "wp_sink_name" => data.push(parsed_target.map(|(_, name)| name.to_string())),
             _ => data.push(None),
         }
     }
@@ -92,7 +104,7 @@ fn is_target_only_collect(collects: &[String]) -> bool {
     collects.iter().all(|k| {
         matches!(
             k.as_str(),
-            "package_name" | "rule_name" | "sink_group" | "sink_name"
+            "wp_package_name" | "wp_rule_name" | "wp_sink_group" | "wp_sink_name"
         )
     })
 }
@@ -287,7 +299,7 @@ impl MetricCollectors {
 
     /// Batch record helper for source metadata key counts.
     ///
-    /// 当事件批次中存在 `access_ip` 等字符串键时，按键聚合计数并写入统计维度；
+    /// 当事件批次中存在 `wp_access_ip` 等字符串键时，按键聚合计数并写入统计维度；
     /// 对于缺少键的事件，回退到 unit 计数，保证总量不丢失。
     pub fn record_task_batch_by_str_key(
         &mut self,
@@ -318,7 +330,7 @@ impl MetricCollectors {
         }
     }
 
-    /// Batch record helper for `(source_type, access_ip)` dimensions.
+    /// Batch record helper for `(wp_source_type, wp_access_ip)` dimensions.
     ///
     /// 对于每个维度二元组做聚合计数；若存在缺失维度的事件，则回退到 unit 计数。
     pub fn record_task_batch_by_source_ip(

@@ -8,6 +8,7 @@ use wp_model_core::raw::RawData;
 pub fn build_base_event(key: &str, tags: &Tags, client_ip: &str, payload: Bytes) -> SourceEvent {
     let mut stags = tags.clone();
     stags.set("access_ip", client_ip.to_string());
+    stags.set("wp_access_ip", client_ip.to_string());
     let mut ev = SourceEvent::new(
         next_event_id(),
         key,

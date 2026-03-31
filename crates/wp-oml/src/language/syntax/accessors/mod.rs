@@ -1,8 +1,10 @@
 pub mod direct;
 pub mod nested;
 
+use crate::core::AsyncFieldExtractor;
 use crate::language::EvaluationTarget;
 use crate::language::prelude::*;
+use async_trait::async_trait;
 
 use wp_data_fmt::Json;
 use wp_knowledge::cache::FieldQueryCache;
@@ -27,8 +29,9 @@ pub enum NestedAccessor {
     StaticSymbol(String),
 }
 
-impl FieldExtractor for NestedAccessor {
-    fn extract_storage(
+#[allow(dead_code)]
+impl NestedAccessor {
+    pub(crate) fn extract_storage(
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
@@ -45,15 +48,19 @@ impl FieldExtractor for NestedAccessor {
         }
     }
 
-    fn extract_one(
+    pub(crate) fn extract_one(
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
         dst: &DataRecord,
     ) -> Option<DataField> {
         match self {
-            NestedAccessor::Field(o) => o.extract_one(target, src, dst),
-            NestedAccessor::FieldArc(o) => o.as_ref().extract_one(target, src, dst),
+            NestedAccessor::Field(o) => {
+                crate::language::data_field_extract_one(o, target, src, dst)
+            }
+            NestedAccessor::FieldArc(o) => {
+                crate::language::data_field_extract_one(o.as_ref(), target, src, dst)
+            }
             NestedAccessor::Direct(o) => o.extract_one(target, src, dst),
             NestedAccessor::Fun(o) => o.extract_one(target, src, dst),
             NestedAccessor::Collect(o) => o.extract_one(target, src, dst),
@@ -62,15 +69,19 @@ impl FieldExtractor for NestedAccessor {
             }
         }
     }
-    fn extract_more(
+    pub(crate) fn extract_more(
         &self,
         src: &mut DataRecordRef<'_>,
         dst: &DataRecord,
         cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         match self {
-            NestedAccessor::Field(o) => o.extract_more(src, dst, cache),
-            NestedAccessor::FieldArc(o) => o.as_ref().extract_more(src, dst, cache),
+            NestedAccessor::Field(o) => {
+                crate::language::data_field_extract_more(o, src, dst, cache)
+            }
+            NestedAccessor::FieldArc(o) => {
+                crate::language::data_field_extract_more(o.as_ref(), src, dst, cache)
+            }
             NestedAccessor::Direct(o) => o.extract_more(src, dst, cache),
             NestedAccessor::Fun(o) => o.extract_more(src, dst, cache),
             NestedAccessor::Collect(o) => o.extract_more(src, dst, cache),
@@ -79,13 +90,83 @@ impl FieldExtractor for NestedAccessor {
             }
         }
     }
-    fn support_batch(&self) -> bool {
+    pub(crate) fn support_batch(&self) -> bool {
         match self {
-            NestedAccessor::Field(o) => o.support_batch(),
-            NestedAccessor::FieldArc(o) => o.as_ref().support_batch(),
+            NestedAccessor::Field(o) => crate::language::data_field_support_batch(o),
+            NestedAccessor::FieldArc(o) => crate::language::data_field_support_batch(o.as_ref()),
             NestedAccessor::Direct(o) => o.support_batch(),
             NestedAccessor::Fun(o) => o.support_batch(),
             NestedAccessor::Collect(o) => o.support_batch(),
+            NestedAccessor::StaticSymbol(sym) => {
+                panic!("unresolved static symbol during execution: {sym}")
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl AsyncFieldExtractor for NestedAccessor {
+    async fn extract_one_async(
+        &self,
+        target: &EvaluationTarget,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
+    ) -> Option<DataField> {
+        match self {
+            NestedAccessor::Field(o) => o.extract_one_async(target, src, dst).await,
+            NestedAccessor::FieldArc(o) => o.as_ref().extract_one_async(target, src, dst).await,
+            NestedAccessor::Direct(o) => o.extract_one_async(target, src, dst).await,
+            NestedAccessor::Fun(o) => o.extract_one_async(target, src, dst).await,
+            NestedAccessor::Collect(o) => o.extract_one_async(target, src, dst).await,
+            NestedAccessor::StaticSymbol(sym) => {
+                panic!("unresolved static symbol during execution: {sym}")
+            }
+        }
+    }
+
+    async fn extract_storage_async(
+        &self,
+        target: &EvaluationTarget,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
+    ) -> Option<FieldStorage> {
+        match self {
+            NestedAccessor::Field(o) => o.extract_storage_async(target, src, dst).await,
+            NestedAccessor::FieldArc(o) => o.as_ref().extract_storage_async(target, src, dst).await,
+            NestedAccessor::Direct(o) => o.extract_storage_async(target, src, dst).await,
+            NestedAccessor::Fun(o) => o.extract_storage_async(target, src, dst).await,
+            NestedAccessor::Collect(o) => o.extract_storage_async(target, src, dst).await,
+            NestedAccessor::StaticSymbol(sym) => {
+                panic!("unresolved static symbol during execution: {sym}")
+            }
+        }
+    }
+
+    async fn extract_more_async(
+        &self,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
+        cache: &mut FieldQueryCache,
+    ) -> Vec<DataField> {
+        match self {
+            NestedAccessor::Field(o) => o.extract_more_async(src, dst, cache).await,
+            NestedAccessor::FieldArc(o) => o.as_ref().extract_more_async(src, dst, cache).await,
+            NestedAccessor::Direct(o) => o.extract_more_async(src, dst, cache).await,
+            NestedAccessor::Fun(o) => o.extract_more_async(src, dst, cache).await,
+            NestedAccessor::Collect(o) => o.extract_more_async(src, dst, cache).await,
+            NestedAccessor::StaticSymbol(sym) => {
+                panic!("unresolved static symbol during execution: {sym}")
+            }
+        }
+    }
+
+    fn support_batch_async(&self) -> bool {
+        match self {
+            NestedAccessor::Field(o) => o.support_batch_async(),
+            NestedAccessor::FieldArc(o) => o.as_ref().support_batch_async(),
+            NestedAccessor::Direct(o) => o.support_batch_async(),
+            NestedAccessor::Fun(o) => o.support_batch_async(),
+            NestedAccessor::Collect(o) => o.support_batch_async(),
             NestedAccessor::StaticSymbol(sym) => {
                 panic!("unresolved static symbol during execution: {sym}")
             }
@@ -220,8 +301,9 @@ pub enum CondAccessor {
     SqlFn(SqlFnExpr),
 }
 
-impl FieldExtractor for CondAccessor {
-    fn extract_one(
+#[allow(dead_code)]
+impl CondAccessor {
+    pub(crate) fn extract_one(
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
@@ -230,12 +312,12 @@ impl FieldExtractor for CondAccessor {
         match self {
             CondAccessor::Tdc(x) => x.extract_one(target, src, dst),
             CondAccessor::Fun(x) => x.extract_one(target, src, dst),
-            CondAccessor::Val(x) => x.extract_one(target, src, dst),
+            CondAccessor::Val(x) => crate::language::value_extract_one(x, target, src, dst),
             CondAccessor::SqlFn(_x) => None, // SQL function is printed inline; params are collected separately
         }
     }
 
-    fn extract_storage(
+    pub(crate) fn extract_storage(
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
@@ -245,7 +327,7 @@ impl FieldExtractor for CondAccessor {
             .map(FieldStorage::from_owned)
     }
 
-    fn extract_more(
+    pub(crate) fn extract_more(
         &self,
         src: &mut DataRecordRef<'_>,
         dst: &DataRecord,
@@ -254,15 +336,69 @@ impl FieldExtractor for CondAccessor {
         match self {
             CondAccessor::Tdc(x) => x.extract_more(src, dst, cache),
             CondAccessor::Fun(x) => x.extract_more(src, dst, cache),
-            CondAccessor::Val(x) => x.extract_more(src, dst, cache),
+            CondAccessor::Val(x) => crate::language::value_extract_more(x, src, dst, cache),
             CondAccessor::SqlFn(_x) => Vec::new(),
         }
     }
-    fn support_batch(&self) -> bool {
+    pub(crate) fn support_batch(&self) -> bool {
         match self {
             CondAccessor::Tdc(x) => x.support_batch(),
             CondAccessor::Fun(x) => x.support_batch(),
-            CondAccessor::Val(x) => x.support_batch(),
+            CondAccessor::Val(x) => crate::language::value_support_batch(x),
+            CondAccessor::SqlFn(_x) => false,
+        }
+    }
+}
+
+#[async_trait]
+impl AsyncFieldExtractor for CondAccessor {
+    async fn extract_one_async(
+        &self,
+        target: &EvaluationTarget,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
+    ) -> Option<DataField> {
+        match self {
+            CondAccessor::Tdc(x) => x.extract_one_async(target, src, dst).await,
+            CondAccessor::Fun(x) => x.extract_one_async(target, src, dst).await,
+            CondAccessor::Val(x) => x.extract_one_async(target, src, dst).await,
+            CondAccessor::SqlFn(_x) => None,
+        }
+    }
+
+    async fn extract_storage_async(
+        &self,
+        target: &EvaluationTarget,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
+    ) -> Option<FieldStorage> {
+        match self {
+            CondAccessor::Tdc(x) => x.extract_storage_async(target, src, dst).await,
+            CondAccessor::Fun(x) => x.extract_storage_async(target, src, dst).await,
+            CondAccessor::Val(x) => x.extract_storage_async(target, src, dst).await,
+            CondAccessor::SqlFn(_x) => None,
+        }
+    }
+
+    async fn extract_more_async(
+        &self,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
+        cache: &mut FieldQueryCache,
+    ) -> Vec<DataField> {
+        match self {
+            CondAccessor::Tdc(x) => x.extract_more_async(src, dst, cache).await,
+            CondAccessor::Fun(x) => x.extract_more_async(src, dst, cache).await,
+            CondAccessor::Val(x) => x.extract_more_async(src, dst, cache).await,
+            CondAccessor::SqlFn(_x) => Vec::new(),
+        }
+    }
+
+    fn support_batch_async(&self) -> bool {
+        match self {
+            CondAccessor::Tdc(x) => x.support_batch_async(),
+            CondAccessor::Fun(x) => x.support_batch_async(),
+            CondAccessor::Val(x) => x.support_batch_async(),
             CondAccessor::SqlFn(_x) => false,
         }
     }
@@ -310,28 +446,33 @@ impl CondAccessor {
     }
 }
 
-impl FieldExtractor for Value {
-    fn extract_one(
+#[async_trait]
+impl AsyncFieldExtractor for Value {
+    async fn extract_one_async(
         &self,
         target: &EvaluationTarget,
-        _src: &mut DataRecordRef<'_>,
-        _dst: &DataRecord,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
     ) -> Option<DataField> {
-        Some(DataField::new(
-            DataType::Auto,
-            target.safe_name(),
-            self.clone(),
-        ))
+        crate::language::value_extract_one(self, target, src, dst)
     }
 
-    fn extract_storage(
+    async fn extract_storage_async(
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
         dst: &DataRecord,
     ) -> Option<FieldStorage> {
-        self.extract_one(target, src, dst)
-            .map(FieldStorage::from_owned)
+        crate::language::value_extract_storage(self, target, src, dst)
+    }
+
+    async fn extract_more_async(
+        &self,
+        _src: &mut DataRecordRef<'_>,
+        _dst: &DataRecord,
+        _cache: &mut FieldQueryCache,
+    ) -> Vec<DataField> {
+        crate::language::value_extract_more(self, _src, _dst, _cache)
     }
 }
 // ---------------- SQL Function Expression (for WHERE) ----------------

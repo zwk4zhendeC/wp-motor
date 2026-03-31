@@ -148,6 +148,22 @@ impl WarpConf {
     }
 }
 
+fn connector_template_by_id(dir: &Path, id: &str) -> Option<PathBuf> {
+    let suffix = format!("-{}.toml", id);
+    std::fs::read_dir(dir)
+        .ok()?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .find(|path| {
+            path.is_file()
+                && path
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .map(|name| name.ends_with(&suffix))
+                    .unwrap_or(false)
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -221,20 +237,4 @@ token_file = "${HOME}/.warp_parse/admin_api.token"
                 .to_string()
         );
     }
-}
-
-fn connector_template_by_id(dir: &Path, id: &str) -> Option<PathBuf> {
-    let suffix = format!("-{}.toml", id);
-    std::fs::read_dir(dir)
-        .ok()?
-        .filter_map(|entry| entry.ok())
-        .map(|entry| entry.path())
-        .find(|path| {
-            path.is_file()
-                && path
-                    .file_name()
-                    .and_then(|s| s.to_str())
-                    .map(|name| name.ends_with(&suffix))
-                    .unwrap_or(false)
-        })
 }

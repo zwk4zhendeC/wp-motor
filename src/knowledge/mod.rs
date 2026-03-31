@@ -3,6 +3,16 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+mod stats_bridge;
+
+pub fn ensure_stats_telemetry_bridge_installed() {
+    stats_bridge::ensure_stats_telemetry_bridge_installed();
+}
+
+pub fn attach_stats_monitor_sender(mon_send: crate::stat::MonSend) {
+    stats_bridge::attach_stats_monitor_sender(mon_send);
+}
+
 #[derive(Clone, Debug)]
 pub struct KnowdbHandler {
     root: Arc<PathBuf>,

@@ -1,5 +1,6 @@
 extern crate wp_knowledge as wp_know;
-use oml::core::DataTransformer;
+
+use oml::AsyncDataTransformer;
 use oml::parser::oml_parse_raw;
 use oml::types::AnyResult;
 use orion_error::TestAssert;
@@ -16,8 +17,8 @@ use wp_model_core::model::DataRecord;
 use wp_model_core::model::Value;
 use wp_model_core::model::types::value::ObjectValue;
 use wp_primitives::WResult as ModalResult;
-#[test]
-fn test_crate_get() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_crate_get() {
     let cache = &mut FieldQueryCache::default();
 
     let data = vec![
@@ -32,10 +33,10 @@ fn test_crate_get() {
         ---
         A10  = take() { _ : chars(hello1) };
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
     let _expect = src.clone();
-    let target = model.transform(src.clone(), cache);
+    let target = model.transform_async(src.clone(), cache).await;
 
     assert_eq!(
         target.get_field_owned("A10"),
@@ -47,8 +48,8 @@ fn test_crate_get() {
         ---
         A1 : chars = take(B2);
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
-    let target = model.transform(src.clone(), cache);
+    let model = oml_parse_raw(&mut conf).await.assert();
+    let target = model.transform_async(src.clone(), cache).await;
     let expect = DataField::from_chars("A1", "hello2");
     assert_eq!(target.get_field_owned("A1"), Some(expect));
 
@@ -57,14 +58,14 @@ fn test_crate_get() {
         ---
         A3 : chars = take(option : [B3,C3]);
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
-    let target = model.transform(src.clone(), cache);
+    let model = oml_parse_raw(&mut conf).await.assert();
+    let target = model.transform_async(src.clone(), cache).await;
     let expect = DataField::from_chars("A3", "hello3");
     assert_eq!(target.get_field_owned("A3"), Some(expect));
 }
 
-#[test]
-fn test_take_fun() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_take_fun() {
     let cache = &mut FieldQueryCache::default();
 
     let data = vec![
@@ -81,9 +82,9 @@ fn test_take_fun() {
         A30  = read() { _ : Now::hour() };
         A40  = read() { _ : Now::hour() };
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
-    let target = model.transform(src.clone(), cache);
+    let target = model.transform_async(src.clone(), cache).await;
 
     assert_eq!(target.get_value("A10"), target.get_value("A20"));
     assert_eq!(target.get_value("A30"), target.get_value("A40"));
@@ -91,8 +92,8 @@ fn test_take_fun() {
     println!("{:?}", target.get_value("A30"));
 }
 
-#[test]
-fn test_take_conv() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_take_conv() {
     let cache = &mut FieldQueryCache::default();
 
     let data = vec![
@@ -109,8 +110,8 @@ fn test_take_conv() {
         C3 : float = read();
         D4 : chars = ip(192.168.1.1);
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
-    let target = model.transform(src.clone(), cache);
+    let model = oml_parse_raw(&mut conf).await.assert();
+    let target = model.transform_async(src.clone(), cache).await;
 
     println!("{}", target);
     assert_eq!(
@@ -123,8 +124,8 @@ fn test_take_conv() {
         Some(&Value::Chars("192.168.1.1".into()))
     );
 }
-#[test]
-fn test_wild_get() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_wild_get() {
     let cache = &mut FieldQueryCache::default();
 
     let data = vec![
@@ -141,10 +142,10 @@ fn test_wild_get() {
         ---
         * = take();
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
     let expect = src.clone();
-    let target = model.transform(src.clone(), cache);
+    let target = model.transform_async(src.clone(), cache).await;
 
     assert_eq!(target.items.len(), 5);
     assert_eq!(
@@ -161,10 +162,10 @@ fn test_wild_get() {
         ---
         */path = take();
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
     let expect = src.clone();
-    let target = model.transform(src.clone(), cache);
+    let target = model.transform_async(src.clone(), cache).await;
 
     assert_eq!(target.items.len(), 2);
     assert_eq!(
@@ -181,10 +182,10 @@ fn test_wild_get() {
         ---
         A*/path = take();
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
     let expect = src.clone();
-    let target = model.transform(src.clone(), cache);
+    let target = model.transform_async(src.clone(), cache).await;
 
     assert_eq!(target.items.len(), 1);
     assert_eq!(
@@ -197,10 +198,10 @@ fn test_wild_get() {
         ---
         */name= take();
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
     let expect = src.clone();
-    let target = model.transform(src.clone(), cache);
+    let target = model.transform_async(src.clone(), cache).await;
 
     assert_eq!(target.items.len(), 3);
     assert_eq!(
@@ -209,8 +210,8 @@ fn test_wild_get() {
     );
 }
 
-#[test]
-fn test_crate_move() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_crate_move() {
     let cache = &mut FieldQueryCache::default();
     let data = vec![
         DataField::from_chars("A1", "hello1"),
@@ -225,17 +226,17 @@ fn test_crate_move() {
         A1 : chars = take(A1);
         A2 : chars = take(A1);
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
     let expect = src.clone();
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
 
     assert_eq!(target.get_field_owned("A1"), expect.get_field_owned("A1"));
     assert!(target.get_field_owned("A2").is_none())
 }
 
-#[test]
-fn test_value_get() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_value_get() {
     let cache = &mut FieldQueryCache::default();
     let data = vec![
         DataField::from_chars("A1", "hello1"),
@@ -249,15 +250,15 @@ fn test_value_get() {
         ---
         A4 : chars = chars(hello4);
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
 
     let expect = DataField::from_chars("A4", "hello4");
     assert_eq!(target.get_field_owned("A4"), Some(expect));
 }
-#[test]
-fn test_map_get() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_map_get() {
     let cache = &mut FieldQueryCache::default();
     let data = vec![
         DataField::from_chars("A1", "hello1"),
@@ -277,9 +278,9 @@ fn test_map_get() {
             C3 : chars = chars(hello3);
         };
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
 
     println!("{}", target);
     let mut expect_obj = ObjectValue::default();
@@ -292,8 +293,8 @@ fn test_map_get() {
     );
 }
 
-#[test]
-fn test_match_get() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_match_get() {
     let cache = &mut FieldQueryCache::default();
     let mut conf = r#"
         name : test
@@ -304,7 +305,7 @@ fn test_match_get() {
                 _  => chars(bj) ;
         };
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
     let data = vec![
         DataField::from_ip("ip", IpAddr::V4(Ipv4Addr::new(10, 0, 0, 3))),
@@ -313,7 +314,7 @@ fn test_match_get() {
     ];
     let src = DataRecord::from(data);
 
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
 
     assert_eq!(one, Some(DataField::from_chars("X", "cs")));
@@ -325,7 +326,7 @@ fn test_match_get() {
     ];
     let src = DataRecord::from(data);
 
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
 
     assert_eq!(one, Some(DataField::from_chars("X", "hk")));
@@ -337,14 +338,14 @@ fn test_match_get() {
     ];
     let src = DataRecord::from(data);
 
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
 
     assert_eq!(one, Some(DataField::from_chars("X", "bj")));
 }
 
-#[test]
-fn test_match2_get() -> ModalResult<()> {
+#[tokio::test(flavor = "current_thread")]
+async fn test_match2_get() -> ModalResult<()> {
     let cache = &mut FieldQueryCache::default();
     let mut conf = r#"
         name : test
@@ -355,7 +356,7 @@ fn test_match2_get() -> ModalResult<()> {
                 _  => chars(bj) ;
         };
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
     let data = vec![
         DataField::from_ip("ip", IpAddr::V4(Ipv4Addr::new(10, 0, 0, 3))),
@@ -365,7 +366,7 @@ fn test_match2_get() -> ModalResult<()> {
     ];
     let src = DataRecord::from(data);
 
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
 
     assert_eq!(one, Some(DataField::from_chars("X", "cs")));
@@ -378,7 +379,7 @@ fn test_match2_get() -> ModalResult<()> {
     ];
     let src = DataRecord::from(data);
 
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
 
     assert_eq!(one, Some(DataField::from_chars("X", "bj")));
@@ -391,7 +392,7 @@ fn test_match2_get() -> ModalResult<()> {
     ];
     let src = DataRecord::from(data);
 
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
 
     assert_eq!(one, Some(DataField::from_chars("X", "hk")));
@@ -403,15 +404,15 @@ fn test_match2_get() -> ModalResult<()> {
     ];
     let src = DataRecord::from(data);
 
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
 
     assert_eq!(one, Some(DataField::from_chars("X", "bj")));
     Ok(())
 }
 
-#[test]
-fn test_match3_get() -> ModalResult<()> {
+#[tokio::test(flavor = "current_thread")]
+async fn test_match3_get() -> ModalResult<()> {
     let cache = &mut FieldQueryCache::default();
     let mut conf = r#"
         name : test
@@ -422,24 +423,24 @@ fn test_match3_get() -> ModalResult<()> {
                 _  => digit(3) ;
         };
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
     let data = vec![DataField::from_bool("key1", true)];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
     assert_eq!(one, Some(DataField::from_digit("X", 1)));
 
     let data = vec![DataField::from_bool("key1", false)];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
     assert_eq!(one, Some(DataField::from_digit("X", 2)));
     Ok(())
 }
 
-#[test]
-fn test_match4_get() -> ModalResult<()> {
+#[tokio::test(flavor = "current_thread")]
+async fn test_match4_get() -> ModalResult<()> {
     let cache = &mut FieldQueryCache::default();
 
     let mut conf = r#"
@@ -459,34 +460,34 @@ X: chars = match  read(month) {
     _ => chars(Q5);
 };
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
     let data = vec![DataField::from_digit("month", 3)];
     let src = DataRecord::from(data);
 
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
     assert_eq!(one, Some(DataField::from_chars("X", "Q1")));
 
     let data = vec![DataField::from_digit("month", 6)];
     let src = DataRecord::from(data);
 
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
     assert_eq!(one, Some(DataField::from_chars("X", "Q2")));
 
     let data = vec![DataField::from_digit("month", 10)];
     let src = DataRecord::from(data);
 
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
     assert_eq!(one, Some(DataField::from_chars("X", "Q4")));
     println!("{}", target);
     Ok(())
 }
 
-#[test]
-fn test_match_triple_get() -> ModalResult<()> {
+#[tokio::test(flavor = "current_thread")]
+async fn test_match_triple_get() -> ModalResult<()> {
     let cache = &mut FieldQueryCache::default();
     let mut conf = r#"
         name : test
@@ -497,7 +498,7 @@ fn test_match_triple_get() -> ModalResult<()> {
                 _  => chars(default) ;
         };
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
     // Test case 1: first arm matches
     let data = vec![
@@ -506,7 +507,7 @@ fn test_match_triple_get() -> ModalResult<()> {
         DataField::from_chars("zone", "north"),
     ];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
     assert_eq!(one, Some(DataField::from_chars("X", "result_A")));
 
@@ -517,7 +518,7 @@ fn test_match_triple_get() -> ModalResult<()> {
         DataField::from_chars("zone", "east"),
     ];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
     assert_eq!(one, Some(DataField::from_chars("X", "result_B")));
 
@@ -528,15 +529,15 @@ fn test_match_triple_get() -> ModalResult<()> {
         DataField::from_chars("zone", "north"),
     ];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
     assert_eq!(one, Some(DataField::from_chars("X", "default")));
 
     Ok(())
 }
 
-#[test]
-fn test_match_triple_with_mixed_cond() -> ModalResult<()> {
+#[tokio::test(flavor = "current_thread")]
+async fn test_match_triple_with_mixed_cond() -> ModalResult<()> {
     let cache = &mut FieldQueryCache::default();
     let mut conf = r#"
         name : test
@@ -547,7 +548,7 @@ fn test_match_triple_with_mixed_cond() -> ModalResult<()> {
                 _  => chars(unknown) ;
         };
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
     // Test case 1: ip in range + exact match
     let data = vec![
@@ -556,7 +557,7 @@ fn test_match_triple_with_mixed_cond() -> ModalResult<()> {
         DataField::from_chars("zone", "north"),
     ];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
     assert_eq!(one, Some(DataField::from_chars("X", "block")));
 
@@ -567,7 +568,7 @@ fn test_match_triple_with_mixed_cond() -> ModalResult<()> {
         DataField::from_chars("zone", "south"),
     ];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
     assert_eq!(one, Some(DataField::from_chars("X", "allow")));
 
@@ -578,15 +579,15 @@ fn test_match_triple_with_mixed_cond() -> ModalResult<()> {
         DataField::from_chars("zone", "west"),
     ];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
     assert_eq!(one, Some(DataField::from_chars("X", "unknown")));
 
     Ok(())
 }
 
-#[test]
-fn test_match_quadruple_get() -> ModalResult<()> {
+#[tokio::test(flavor = "current_thread")]
+async fn test_match_quadruple_get() -> ModalResult<()> {
     let cache = &mut FieldQueryCache::default();
     let mut conf = r#"
         name : test
@@ -597,7 +598,7 @@ fn test_match_quadruple_get() -> ModalResult<()> {
                 _  => chars(default_rule) ;
         };
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
     // Test case 1: first arm matches
     let data = vec![
@@ -607,7 +608,7 @@ fn test_match_quadruple_get() -> ModalResult<()> {
         DataField::from_chars("action", "allow"),
     ];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
     assert_eq!(one, Some(DataField::from_chars("X", "rule_A")));
 
@@ -619,7 +620,7 @@ fn test_match_quadruple_get() -> ModalResult<()> {
         DataField::from_chars("action", "deny"),
     ];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
     assert_eq!(one, Some(DataField::from_chars("X", "rule_B")));
 
@@ -631,15 +632,15 @@ fn test_match_quadruple_get() -> ModalResult<()> {
         DataField::from_chars("action", "log"),
     ];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
     assert_eq!(one, Some(DataField::from_chars("X", "default_rule")));
 
     Ok(())
 }
 
-#[test]
-fn test_match_quadruple_with_range() -> ModalResult<()> {
+#[tokio::test(flavor = "current_thread")]
+async fn test_match_quadruple_with_range() -> ModalResult<()> {
     let cache = &mut FieldQueryCache::default();
     let mut conf = r#"
         name : test
@@ -650,7 +651,7 @@ fn test_match_quadruple_with_range() -> ModalResult<()> {
                 _  => chars(normal) ;
         };
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
     // Test case 1: both ip ranges match + exact fields
     let data = vec![
@@ -660,7 +661,7 @@ fn test_match_quadruple_with_range() -> ModalResult<()> {
         DataField::from_chars("zone", "east"),
     ];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
     assert_eq!(one, Some(DataField::from_chars("X", "critical")));
 
@@ -672,15 +673,15 @@ fn test_match_quadruple_with_range() -> ModalResult<()> {
         DataField::from_chars("zone", "east"),
     ];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     let one = target.get_field_owned("X");
     assert_eq!(one, Some(DataField::from_chars("X", "normal")));
 
     Ok(())
 }
 
-#[test]
-fn test_value_arr() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_value_arr() {
     let cache = &mut FieldQueryCache::default();
     let data = vec![
         DataField::from_chars("A1", "hello1"),
@@ -696,9 +697,9 @@ fn test_value_arr() {
         X1 : array = collect take(keys : [A1, B2,C*]);
         X2  =  pipe read(X1) | to_json ;
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
 
     let expect = DataField::from_arr("X1".to_string(), data);
     assert_eq!(target.get_field_owned("X1"), Some(expect));
@@ -713,8 +714,8 @@ fn test_value_arr() {
     //println!("{}", target.get("X2"));
 }
 
-#[test]
-fn test_sql_1() -> AnyResult<()> {
+#[tokio::test(flavor = "current_thread")]
+async fn test_sql_1() -> AnyResult<()> {
     let cache = &mut FieldQueryCache::default();
     // 绑定门面到全局内存库并装载 example 表
     let _ = wp_knowledge::facade::init_mem_provider(MemDB::global());
@@ -728,16 +729,16 @@ fn test_sql_1() -> AnyResult<()> {
         A2,B2  = select name,pinying from example where pinying = read(py) ;
         _,_  = select name,pinying from example where pinying = "xiaolongnu" ;
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
-    let target = model.transform(src, cache);
+    let model = oml_parse_raw(&mut conf).await.assert();
+    let target = model.transform_async(src, cache).await;
     let result = Json.fmt_record(&target).to_string();
     let expect = r#"{"A2":"小龙女","B2":"xiaolongnu","name":"小龙女","pinying":"xiaolongnu"}"#;
     assert_eq!(result, expect);
     Ok(())
 }
 
-#[test]
-fn test_sql_debug() -> AnyResult<()> {
+#[tokio::test(flavor = "current_thread")]
+async fn test_sql_debug() -> AnyResult<()> {
     log_for_test()?;
     let cache = &mut FieldQueryCache::default();
     let _ = wp_knowledge::facade::init_mem_provider(MemDB::global());
@@ -750,16 +751,16 @@ fn test_sql_debug() -> AnyResult<()> {
         ---
         _,_  = select name,pinying from example where pinying = 'xiaolongnu' ;
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
-    let target = model.transform(src, cache);
+    let model = oml_parse_raw(&mut conf).await.assert();
+    let target = model.transform_async(src, cache).await;
     let result = Json.fmt_record(&target).to_string();
     let expect = r#"{"name":"小龙女","pinying":"xiaolongnu"}"#;
     assert_eq!(result, expect);
     Ok(())
 }
 
-#[test]
-fn test_value_arr1() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_value_arr1() {
     let cache = &mut FieldQueryCache::default();
 
     let data = vec![
@@ -777,9 +778,9 @@ fn test_value_arr1() {
         X2  = pipe read(X1) | nth(0) ;
         X3  = pipe read(X1) | nth(2) ;
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
 
     println!("{}", Json.fmt_record(&target));
     let expect = DataField::from_arr("X1".to_string(), data);
@@ -797,20 +798,20 @@ fn test_value_arr1() {
 
 // ==================== Enable Configuration Tests ====================
 
-#[test]
-fn test_enable_default_true() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_enable_default_true() {
     // Test that enable defaults to true when not specified
     let mut conf = r#"
         name : test
         ---
         A1 = chars(hello);
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
     assert!(*model.enable(), "Default enable should be true");
 }
 
-#[test]
-fn test_enable_explicit_true() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_enable_explicit_true() {
     // Test explicit enable: true
     let mut conf = r#"
         name : test
@@ -818,12 +819,12 @@ fn test_enable_explicit_true() {
         ---
         A1 = chars(hello);
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
     assert!(*model.enable(), "Explicit enable true");
 }
 
-#[test]
-fn test_enable_explicit_false() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_enable_explicit_false() {
     // Test explicit enable: false
     let mut conf = r#"
         name : test
@@ -831,12 +832,12 @@ fn test_enable_explicit_false() {
         ---
         A1 = chars(hello);
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
     assert!(!*model.enable(), "Explicit enable false");
 }
 
-#[test]
-fn test_enable_with_rule() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_enable_with_rule() {
     // Test enable with rule configuration
     let mut conf = r#"
         name : test
@@ -845,13 +846,13 @@ fn test_enable_with_rule() {
         ---
         A1 = chars(hello);
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
     assert!(!*model.enable(), "Enable should be false");
     assert!(!model.rules().is_empty(), "Rules should be set");
 }
 
-#[test]
-fn test_enable_before_rule() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_enable_before_rule() {
     // Test enable before rule (order independence)
     let mut conf = r#"
         name : test
@@ -860,13 +861,13 @@ fn test_enable_before_rule() {
         ---
         A1 = chars(hello);
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
     assert!(!*model.enable(), "Enable should be false");
     assert!(!model.rules().is_empty(), "Rules should be set");
 }
 
-#[test]
-fn test_enabled_model_transforms_data() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_enabled_model_transforms_data() {
     // Test that enabled model transforms data correctly
     let cache = &mut FieldQueryCache::default();
     let mut conf = r#"
@@ -875,19 +876,19 @@ fn test_enabled_model_transforms_data() {
         ---
         result = chars(transformed);
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
     assert!(*model.enable());
 
     let src = DataRecord::default();
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("result"),
         Some(DataField::from_chars("result", "transformed"))
     );
 }
 
-#[test]
-fn test_disabled_model_still_parses() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_disabled_model_still_parses() {
     // Test that disabled model can still be parsed and used if needed
     // (the filtering happens at load time, not at parse time)
     let cache = &mut FieldQueryCache::default();
@@ -897,21 +898,21 @@ fn test_disabled_model_still_parses() {
         ---
         result = chars(should_not_run);
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
     assert!(!*model.enable());
     assert_eq!(model.name(), "disabled_model");
 
     // Model can still transform if called directly (filtering is at load time)
     let src = DataRecord::default();
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("result"),
         Some(DataField::from_chars("result", "should_not_run"))
     );
 }
 
-#[test]
-fn test_enable_with_complex_config() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_enable_with_complex_config() {
     // Test enable with complex configuration including static blocks
     let cache = &mut FieldQueryCache::default();
     let mut conf = r#"
@@ -925,7 +926,7 @@ fn test_enable_with_complex_config() {
         result = default_val;
         field1, field2 = take();
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
     assert!(*model.enable());
     assert_eq!(model.rules().as_ref().len(), 2);
 
@@ -934,7 +935,7 @@ fn test_enable_with_complex_config() {
         DataField::from_chars("field2", "v2"),
     ];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
 
     assert_eq!(
         target.get_field_owned("result"),
@@ -946,8 +947,8 @@ fn test_enable_with_complex_config() {
     );
 }
 
-#[test]
-fn test_enable_preserves_model_name() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_enable_preserves_model_name() {
     // Ensure enable config doesn't affect model name parsing
     let mut conf = r#"
         name : my_special_model
@@ -955,13 +956,13 @@ fn test_enable_preserves_model_name() {
         ---
         x = chars(y);
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
     assert_eq!(model.name(), "my_special_model");
     assert!(!*model.enable());
 }
 
-#[test]
-fn test_multiple_rules_with_enable() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_multiple_rules_with_enable() {
     // Test multiple rules with enable configuration
     let mut conf = r#"
         name : multi_rule_model
@@ -970,15 +971,15 @@ fn test_multiple_rules_with_enable() {
         ---
         * = take();
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
     assert!(*model.enable());
     assert_eq!(model.rules().as_ref().len(), 3);
 }
 
 // ==================== Static Symbol Match Tests ====================
 
-#[test]
-fn test_static_symbol_eq_match() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_static_symbol_eq_match() {
     // Test static symbols in equality match conditions
     let cache = &mut FieldQueryCache::default();
     let mut conf = r#"
@@ -994,7 +995,7 @@ fn test_static_symbol_eq_match() {
             _ => chars(remote);
         };
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
     // Test matching case
     let data = vec![DataField::from_ip(
@@ -1002,7 +1003,7 @@ fn test_static_symbol_eq_match() {
         IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
     )];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("result"),
         Some(DataField::from_chars("result", "localhost"))
@@ -1014,15 +1015,15 @@ fn test_static_symbol_eq_match() {
         IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)),
     )];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("result"),
         Some(DataField::from_chars("result", "remote"))
     );
 }
 
-#[test]
-fn test_static_symbol_neq_match() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_static_symbol_neq_match() {
     // Test static symbols in negation match conditions
     let cache = &mut FieldQueryCache::default();
     let mut conf = r#"
@@ -1037,7 +1038,7 @@ fn test_static_symbol_neq_match() {
             _ => chars(internal);
         };
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
     // Test negation match (not 127.0.0.1)
     let data = vec![DataField::from_ip(
@@ -1045,7 +1046,7 @@ fn test_static_symbol_neq_match() {
         IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)),
     )];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("result"),
         Some(DataField::from_chars("result", "external"))
@@ -1057,15 +1058,15 @@ fn test_static_symbol_neq_match() {
         IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
     )];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("result"),
         Some(DataField::from_chars("result", "internal"))
     );
 }
 
-#[test]
-fn test_static_symbol_in_range_match() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_static_symbol_in_range_match() {
     // Test static symbols in range match conditions
     let cache = &mut FieldQueryCache::default();
     let mut conf = r#"
@@ -1084,12 +1085,12 @@ fn test_static_symbol_in_range_match() {
             _ => chars(other);
         };
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
     // Test in first range
     let data = vec![DataField::from_digit("http_status", 200)];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("level"),
         Some(DataField::from_chars("level", "success"))
@@ -1097,7 +1098,7 @@ fn test_static_symbol_in_range_match() {
 
     let data = vec![DataField::from_digit("http_status", 250)];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("level"),
         Some(DataField::from_chars("level", "success"))
@@ -1106,7 +1107,7 @@ fn test_static_symbol_in_range_match() {
     // Test in second range
     let data = vec![DataField::from_digit("http_status", 404)];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("level"),
         Some(DataField::from_chars("level", "client_error"))
@@ -1115,15 +1116,15 @@ fn test_static_symbol_in_range_match() {
     // Test outside ranges (default)
     let data = vec![DataField::from_digit("http_status", 500)];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("level"),
         Some(DataField::from_chars("level", "other"))
     );
 }
 
-#[test]
-fn test_static_symbol_chars_match() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_static_symbol_chars_match() {
     // Test static symbols with chars data type
     let cache = &mut FieldQueryCache::default();
     let mut conf = r#"
@@ -1140,12 +1141,12 @@ fn test_static_symbol_chars_match() {
             _ => digit(5);
         };
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
     // Test production environment
     let data = vec![DataField::from_chars("environment", "production")];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("priority"),
         Some(DataField::from_digit("priority", 1))
@@ -1154,7 +1155,7 @@ fn test_static_symbol_chars_match() {
     // Test development environment
     let data = vec![DataField::from_chars("environment", "development")];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("priority"),
         Some(DataField::from_digit("priority", 3))
@@ -1163,15 +1164,15 @@ fn test_static_symbol_chars_match() {
     // Test other environment
     let data = vec![DataField::from_chars("environment", "staging")];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("priority"),
         Some(DataField::from_digit("priority", 5))
     );
 }
 
-#[test]
-fn test_static_symbol_multiple_match_cases() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_static_symbol_multiple_match_cases() {
     // Test multiple match expressions using static symbols
     let cache = &mut FieldQueryCache::default();
     let mut conf = r#"
@@ -1195,7 +1196,7 @@ fn test_static_symbol_multiple_match_cases() {
             _ => chars(other);
         };
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
     // Test both matches
     let data = vec![
@@ -1203,7 +1204,7 @@ fn test_static_symbol_multiple_match_cases() {
         DataField::from_digit("status_code", 300),
     ];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
 
     assert_eq!(
         target.get_field_owned("ip_type"),
@@ -1220,7 +1221,7 @@ fn test_static_symbol_multiple_match_cases() {
         DataField::from_digit("status_code", 500),
     ];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
 
     assert_eq!(
         target.get_field_owned("ip_type"),
@@ -1232,8 +1233,8 @@ fn test_static_symbol_multiple_match_cases() {
     );
 }
 
-#[test]
-fn test_static_symbol_with_result_reference() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_static_symbol_with_result_reference() {
     // Test static symbols in both condition and result parts
     let cache = &mut FieldQueryCache::default();
     let mut conf = r#"
@@ -1251,12 +1252,12 @@ fn test_static_symbol_with_result_reference() {
             _ => low_label;
         };
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
     // Test in range
     let data = vec![DataField::from_digit("value", 150)];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("level"),
         Some(DataField::from_chars("level", "high"))
@@ -1265,7 +1266,7 @@ fn test_static_symbol_with_result_reference() {
     // Test below range
     let data = vec![DataField::from_digit("value", 50)];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("level"),
         Some(DataField::from_chars("level", "low"))
@@ -1274,8 +1275,8 @@ fn test_static_symbol_with_result_reference() {
 
 // ==================== Arc Performance Tests ====================
 
-#[test]
-fn test_arc_optimization_parsing_performance() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_arc_optimization_parsing_performance() {
     use std::time::Instant;
 
     // Test with static symbols (should use Arc for zero-copy)
@@ -1304,7 +1305,7 @@ fn test_arc_optimization_parsing_performance() {
     "#;
 
     let start = Instant::now();
-    let model_with_static = oml_parse_raw(&mut conf_with_static).assert();
+    let model_with_static = oml_parse_raw(&mut conf_with_static).await.assert();
     let parse_time_static = start.elapsed();
 
     // Test without static symbols (inline values, multiple DataField clones)
@@ -1323,7 +1324,7 @@ fn test_arc_optimization_parsing_performance() {
     "#;
 
     let start = Instant::now();
-    let model_without_static = oml_parse_raw(&mut conf_without_static).assert();
+    let model_without_static = oml_parse_raw(&mut conf_without_static).await.assert();
     let parse_time_no_static = start.elapsed();
 
     println!("\n=== Parsing Performance (Arc Optimization) ===");
@@ -1342,8 +1343,10 @@ fn test_arc_optimization_parsing_performance() {
     let src = DataRecord::from(data);
 
     // Verify both produce correct results
-    let result_static = model_with_static.transform(src.clone(), cache);
-    let result_no_static = model_without_static.transform(src.clone(), cache);
+    let result_static = model_with_static.transform_async(src.clone(), cache).await;
+    let result_no_static = model_without_static
+        .transform_async(src.clone(), cache)
+        .await;
 
     assert_eq!(
         result_static.get_field_owned("ip_type"),
@@ -1355,8 +1358,8 @@ fn test_arc_optimization_parsing_performance() {
     );
 }
 
-#[test]
-fn test_arc_optimization_with_many_references() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_arc_optimization_with_many_references() {
     use std::time::Instant;
 
     // Test with many static symbol references
@@ -1416,7 +1419,7 @@ fn test_arc_optimization_with_many_references() {
     "#;
 
     let start = Instant::now();
-    let _model_with_static = oml_parse_raw(&mut conf_with_static).assert();
+    let _model_with_static = oml_parse_raw(&mut conf_with_static).await.assert();
     let parse_time_static = start.elapsed();
 
     // Same logic without static - each value is duplicated many times
@@ -1463,7 +1466,7 @@ fn test_arc_optimization_with_many_references() {
     "#;
 
     let start = Instant::now();
-    let _model_without_static = oml_parse_raw(&mut conf_without_static).assert();
+    let _model_without_static = oml_parse_raw(&mut conf_without_static).await.assert();
     let parse_time_no_static = start.elapsed();
 
     println!("\n=== Parsing Performance (Many References) ===");
@@ -1481,8 +1484,8 @@ fn test_arc_optimization_with_many_references() {
 
 // ==================== OR Match Tests ====================
 
-#[test]
-fn test_match_or_single_source() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_match_or_single_source() {
     let cache = &mut FieldQueryCache::default();
     let mut conf = r#"
         name : test
@@ -1493,12 +1496,12 @@ fn test_match_or_single_source() {
             _ => chars(other),
         };
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
     // Test first alternative
     let data = vec![DataField::from_chars("city", "bj")];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("X"),
         Some(DataField::from_chars("X", "tier1"))
@@ -1507,7 +1510,7 @@ fn test_match_or_single_source() {
     // Test second alternative
     let data = vec![DataField::from_chars("city", "sh")];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("X"),
         Some(DataField::from_chars("X", "tier1"))
@@ -1516,7 +1519,7 @@ fn test_match_or_single_source() {
     // Test third alternative
     let data = vec![DataField::from_chars("city", "gz")];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("X"),
         Some(DataField::from_chars("X", "tier1"))
@@ -1525,7 +1528,7 @@ fn test_match_or_single_source() {
     // Test second arm
     let data = vec![DataField::from_chars("city", "cd")];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("X"),
         Some(DataField::from_chars("X", "tier2"))
@@ -1534,15 +1537,15 @@ fn test_match_or_single_source() {
     // Test default
     let data = vec![DataField::from_chars("city", "unknown")];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("X"),
         Some(DataField::from_chars("X", "other"))
     );
 }
 
-#[test]
-fn test_match_or_multi_source() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_match_or_multi_source() {
     let cache = &mut FieldQueryCache::default();
     let mut conf = r#"
         name : test
@@ -1553,7 +1556,7 @@ fn test_match_or_multi_source() {
             _ => chars(default),
         };
         "#;
-    let model = oml_parse_raw(&mut conf).assert();
+    let model = oml_parse_raw(&mut conf).await.assert();
 
     // Test: city=bj, level=high => priority
     let data = vec![
@@ -1561,7 +1564,7 @@ fn test_match_or_multi_source() {
         DataField::from_chars("level", "high"),
     ];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("X"),
         Some(DataField::from_chars("X", "priority"))
@@ -1573,7 +1576,7 @@ fn test_match_or_multi_source() {
         DataField::from_chars("level", "high"),
     ];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("X"),
         Some(DataField::from_chars("X", "priority"))
@@ -1585,7 +1588,7 @@ fn test_match_or_multi_source() {
         DataField::from_chars("level", "low"),
     ];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("X"),
         Some(DataField::from_chars("X", "normal"))
@@ -1597,7 +1600,7 @@ fn test_match_or_multi_source() {
         DataField::from_chars("level", "mid"),
     ];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("X"),
         Some(DataField::from_chars("X", "normal"))
@@ -1609,7 +1612,7 @@ fn test_match_or_multi_source() {
         DataField::from_chars("level", "high"),
     ];
     let src = DataRecord::from(data);
-    let target = model.transform(src, cache);
+    let target = model.transform_async(src, cache).await;
     assert_eq!(
         target.get_field_owned("X"),
         Some(DataField::from_chars("X", "default"))

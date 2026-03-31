@@ -1,17 +1,14 @@
+mod support;
+
 use criterion::{Criterion, criterion_group, criterion_main};
-use oml::core::DataTransformer;
 use oml::language::ObjModel;
-use oml::parser::oml_parse_raw;
 use std::hint::black_box;
+use support::{BenchTransformExt, parse_model};
 use wp_knowledge::cache::FieldQueryCache;
 use wp_model_core::model::{DataField, DataRecord};
-use wp_primitives::Parser;
 
 fn build_model(code: &str) -> ObjModel {
-    let conf = code.to_string();
-    oml_parse_raw
-        .parse_next(&mut conf.as_str())
-        .expect("parse OML model for bench")
+    parse_model(code)
 }
 
 // ---------------------------------------------------------------------------

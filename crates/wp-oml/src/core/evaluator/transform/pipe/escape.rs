@@ -91,14 +91,14 @@ impl ValueProcessor for ToJson {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::DataTransformer;
+    use crate::core::AsyncDataTransformer;
     use crate::parser::oml_parse_raw;
     use orion_error::TestAssert;
     use wp_knowledge::cache::FieldQueryCache;
     use wp_model_core::model::{DataField, DataRecord, FieldStorage};
 
-    #[test]
-    fn test_html_escape() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_html_escape() {
         let cache = &mut FieldQueryCache::default();
         let data = vec![FieldStorage::from_owned(DataField::from_chars(
             "A1", "<html>",
@@ -110,16 +110,16 @@ mod tests {
         ---
         X : chars =  pipe take(A1) | html_escape | html_unescape;
          "#;
-        let model = oml_parse_raw(&mut conf).assert();
+        let model = oml_parse_raw(&mut conf).await.assert();
 
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
 
         let expect = DataField::from_chars("X".to_string(), "<html>".to_string());
         assert_eq!(target.field("X").map(|s| s.as_field()), Some(&expect));
     }
 
-    #[test]
-    fn test_str_escape() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_str_escape() {
         let cache = &mut FieldQueryCache::default();
         let data = vec![FieldStorage::from_owned(DataField::from_chars(
             "A1", "html\"1_",
@@ -131,16 +131,16 @@ mod tests {
         ---
         X : chars =  pipe take(A1) | str_escape  ;
          "#;
-        let model = oml_parse_raw(&mut conf).assert();
+        let model = oml_parse_raw(&mut conf).await.assert();
 
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
 
         let expect = DataField::from_chars("X".to_string(), r#"html\"1_"#.to_string());
         assert_eq!(target.field("X").map(|s| s.as_field()), Some(&expect));
     }
 
-    #[test]
-    fn test_json_escape() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_json_escape() {
         let cache = &mut FieldQueryCache::default();
         let data = vec![FieldStorage::from_owned(DataField::from_chars(
             "A1",
@@ -153,9 +153,9 @@ mod tests {
         ---
         X : chars =  pipe take(A1) | json_escape  | json_unescape ;
          "#;
-        let model = oml_parse_raw(&mut conf).assert();
+        let model = oml_parse_raw(&mut conf).await.assert();
 
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
 
         let expect = DataField::from_chars("X".to_string(), "This is a crab: 🦀".to_string());
         assert_eq!(target.field("X").map(|s| s.as_field()), Some(&expect));

@@ -35,6 +35,7 @@ pub async fn recover_main(
         args.stat_sec,
     );
     let mon_send = actor_mon.send_agent();
+    crate::knowledge::attach_stats_monitor_sender(mon_send.clone());
     // 传递所有统计需求给监控器，以便正确处理和显示统计信息
     let monitor_reqs = stat_reqs.get_all().clone();
     mon_group.append(tokio::spawn(async move {

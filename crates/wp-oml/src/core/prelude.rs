@@ -1,5 +1,4 @@
 pub use super::evaluator::traits::*;
-pub use crate::core::FieldExtractor;
 pub use crate::core::ValueProcessor;
 pub use crate::core::model::DataRecordRef;
 pub use crate::language::BatchEvalTarget;

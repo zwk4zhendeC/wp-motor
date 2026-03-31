@@ -178,7 +178,9 @@ impl SinkDispatcher {
             let Some(meta) = units.first().map(|unit| unit.meta().clone()) else {
                 continue;
             };
-            let mut per_sink_units = self.oml_proc_batch(units, infra, cache, &meta)?;
+            let mut per_sink_units = self
+                .oml_proc_batch_async(units, infra, cache, &meta)
+                .await?;
             for (idx, sink_rt) in self.sinks.iter_mut().enumerate() {
                 let payload = {
                     if !sink_rt.is_ready() {

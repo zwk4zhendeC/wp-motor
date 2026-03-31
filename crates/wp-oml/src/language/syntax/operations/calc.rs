@@ -102,6 +102,10 @@ impl CalcOperation {
     pub fn new(expr: CalcExpr) -> Self {
         Self { expr }
     }
+
+    pub fn expr_mut(&mut self) -> &mut CalcExpr {
+        &mut self.expr
+    }
 }
 
 impl Display for CalcOperation {

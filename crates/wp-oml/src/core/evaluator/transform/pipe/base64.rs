@@ -206,13 +206,13 @@ impl ValueProcessor for Base64Decode {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::DataTransformer;
+    use crate::core::AsyncDataTransformer;
     use crate::parser::oml_parse_raw;
     use wp_knowledge::cache::FieldQueryCache;
     use wp_model_core::model::{DataField, DataRecord, FieldStorage};
 
-    #[test]
-    fn test_pipe_base64() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_pipe_base64() {
         let cache = &mut FieldQueryCache::default();
         let data = vec![
             FieldStorage::from_owned(DataField::from_chars("A1", "hello1")),
@@ -234,9 +234,9 @@ mod tests {
         Y : chars =  pipe take(B2) | base64_decode(Imap) ;
         Z : chars =  pipe take(C3) | base64_decode(Imap) ;
          "#;
-        let model = oml_parse_raw(&mut conf).unwrap();
+        let model = oml_parse_raw(&mut conf).await.unwrap();
 
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
 
         let expect = DataField::from_chars("X".to_string(), "hello1".to_string());
         assert_eq!(target.field("X").map(|s| s.as_field()), Some(&expect));

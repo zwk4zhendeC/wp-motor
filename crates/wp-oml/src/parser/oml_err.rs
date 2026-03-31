@@ -1,13 +1,13 @@
 #[cfg(test)]
 mod tests {
-    use crate::parser::oml_parse_raw;
+    use crate::parser::oml_conf::oml_parse_syntax_raw;
     use wp_primitives::Parser;
     use wp_primitives::WResult as ModalResult;
     use wpl::parser::error::WplCodeError;
     use wpl::parser::error::WplCodeReason;
 
-    #[test]
-    fn test_report_err() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_report_err() -> ModalResult<()> {
         let mut code = r#"
 name : test
 ---
@@ -52,8 +52,8 @@ update_time  :time    = take () { :  time(2020-10-01 12:30:30) };
         report_err(&mut code, ":  time");
         Ok(())
     }
-    #[test]
-    fn test_match_err() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_err() {
         let mut code = r#"
 name : test
 ---
@@ -87,8 +87,8 @@ x   : chars = match  take() {
         report_err(&mut code, "chars2");
     }
 
-    #[test]
-    fn test_match_wild() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_wild() {
         let mut code = r#"
 name : test
 ---
@@ -100,8 +100,8 @@ time*     : auto    = Time::now() ;
         report_err(&mut code, "Time::now()");
     }
 
-    #[test]
-    fn test_match2_err() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match2_err() -> ModalResult<()> {
         let mut code = r#"
         name : test
         ---
@@ -173,7 +173,7 @@ time*     : auto    = Time::now() ;
         Ok(())
     }
     fn report_err(code: &mut &str, pos: &str) {
-        match oml_parse_raw.parse_next(code).map_err(|e| {
+        match oml_parse_syntax_raw.parse_next(code).map_err(|e| {
             WplCodeError::from(WplCodeReason::Syntax("".into()))
                 .with_detail(e.to_string())
                 .with_position(code.to_string())

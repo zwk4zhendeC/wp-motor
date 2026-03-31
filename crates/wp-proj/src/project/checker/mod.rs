@@ -220,15 +220,32 @@ fn check_semantic_dict_config(work_root: &Path, dict: &EnvDict) -> Result<Option
 
     let primary = PathBuf::from(main_conf.knowledge_root()).join("semantic_dict.toml");
     if primary.exists() {
-        return oml::check_semantic_dict_config(Some(&primary));
+        return oml::check_semantic_dict_config(Some(&primary))
+            .map(|msg| msg.map(|msg| shorten_semantic_dict_message(&msg, work_root, &primary)));
     }
 
     let fallback = work_root.join("knowledge/semantic_dict.toml");
     if fallback.exists() {
-        return oml::check_semantic_dict_config(Some(&fallback));
+        return oml::check_semantic_dict_config(Some(&fallback))
+            .map(|msg| msg.map(|msg| shorten_semantic_dict_message(&msg, work_root, &fallback)));
     }
 
     Ok(None)
+}
+
+fn shorten_semantic_dict_message(msg: &str, work_root: &Path, config_path: &Path) -> String {
+    let short_path = config_path
+        .strip_prefix(work_root)
+        .ok()
+        .map(|p| format!("./{}", p.to_string_lossy()))
+        .unwrap_or_else(|| config_path.to_string_lossy().to_string());
+
+    let full_path = config_path.to_string_lossy();
+    let replaced = msg.replace(full_path.as_ref(), &short_path);
+    replaced
+        .strip_prefix("语义词典配置有效: ")
+        .unwrap_or(&replaced)
+        .to_string()
 }
 
 #[derive(Default, Clone, Copy)]
@@ -456,4 +473,26 @@ fn collect_connector_counts(work_root: &str, dict: &EnvDict) -> Result<Connector
         sink_defs,
         sink_routes,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::shorten_semantic_dict_message;
+    use std::path::Path;
+
+    #[test]
+    fn semantic_dict_message_is_shortened_for_table_output() {
+        let work_root = Path::new("/tmp/demo");
+        let config_path = work_root.join("models/knowledge/semantic_dict.toml");
+        let raw = format!(
+            "语义词典配置有效: {} | 模式: ADD（扩展内置词典） | 词汇数: 0",
+            config_path.display()
+        );
+
+        let short = shorten_semantic_dict_message(&raw, work_root, &config_path);
+        assert_eq!(
+            short,
+            "./models/knowledge/semantic_dict.toml | 模式: ADD（扩展内置词典） | 词汇数: 0"
+        );
+    }
 }

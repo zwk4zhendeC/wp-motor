@@ -421,7 +421,7 @@ impl ValueProcessor for ExtractMainWord {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::DataTransformer;
+    use crate::core::AsyncDataTransformer;
     use crate::core::evaluator::transform::pipe::semantic_dict_loader::set_semantic_enabled;
     use crate::parser::oml_parse_raw;
     use orion_error::TestAssert;
@@ -433,8 +433,8 @@ mod tests {
         set_semantic_enabled(true);
     }
 
-    #[test]
-    fn test_extract_main_word() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_extract_main_word() {
         enable_semantic();
         let cache = &mut FieldQueryCache::default();
         let data = vec![
@@ -472,8 +472,8 @@ mod tests {
         W1  =  pipe read(D1) | extract_main_word ;
         W2  =  pipe read(D2) | extract_main_word ;
          "#;
-        let model = oml_parse_raw(&mut conf).assert();
-        let target = model.transform(src, cache);
+        let model = oml_parse_raw(&mut conf).await.assert();
+        let target = model.transform_async(src, cache).await;
 
         // 英文：提取第一个非停用词
         let x1 = target.field("X1").unwrap();
@@ -552,8 +552,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_extract_main_word_english() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_extract_main_word_english() {
         enable_semantic();
         let cache = &mut FieldQueryCache::default();
         let data = vec![
@@ -592,8 +592,8 @@ mod tests {
         R10 =  pipe read(E10) | extract_main_word ;
         R11 =  pipe read(E11) | extract_main_word ;
          "#;
-        let model = oml_parse_raw(&mut conf).assert();
-        let target = model.transform(src, cache);
+        let model = oml_parse_raw(&mut conf).await.assert();
+        let target = model.transform_async(src, cache).await;
 
         // 验证提取结果
         let r1 = target.field("R1").unwrap();
@@ -675,54 +675,54 @@ mod tests {
     }
 
     fn print_saso(target: &DataRecord, name: &str) {
-        if let Some(field) = target.field(name) {
-            if let Value::Obj(obj) = field.get_value() {
-                let subject = obj
-                    .get("subject")
-                    .map(|f| f.get_value().to_string())
-                    .unwrap_or_default();
-                let action = obj
-                    .get("action")
-                    .map(|f| f.get_value().to_string())
-                    .unwrap_or_default();
-                let object = obj
-                    .get("object")
-                    .map(|f| f.get_value().to_string())
-                    .unwrap_or_default();
-                let status = obj
-                    .get("status")
-                    .map(|f| f.get_value().to_string())
-                    .unwrap_or_default();
-                println!(
-                    "{}: subject={}, action={}, object={}, status={}",
-                    name, subject, action, object, status
-                );
-            }
+        if let Some(field) = target.field(name)
+            && let Value::Obj(obj) = field.get_value()
+        {
+            let subject = obj
+                .get("subject")
+                .map(|f| f.get_value().to_string())
+                .unwrap_or_default();
+            let action = obj
+                .get("action")
+                .map(|f| f.get_value().to_string())
+                .unwrap_or_default();
+            let object = obj
+                .get("object")
+                .map(|f| f.get_value().to_string())
+                .unwrap_or_default();
+            let status = obj
+                .get("status")
+                .map(|f| f.get_value().to_string())
+                .unwrap_or_default();
+            println!(
+                "{}: subject={}, action={}, object={}, status={}",
+                name, subject, action, object, status
+            );
         }
     }
 
     fn get_saso(target: &DataRecord, name: &str) -> (String, String, String, String) {
-        if let Some(field) = target.field(name) {
-            if let Value::Obj(obj) = field.get_value() {
-                let get = |key: &str| -> String {
-                    obj.get(key)
-                        .and_then(|f| {
-                            if let Value::Chars(s) = f.get_value() {
-                                Some(s.to_string())
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap_or_default()
-                };
-                return (get("subject"), get("action"), get("object"), get("status"));
-            }
+        if let Some(field) = target.field(name)
+            && let Value::Obj(obj) = field.get_value()
+        {
+            let get = |key: &str| -> String {
+                obj.get(key)
+                    .and_then(|f| {
+                        if let Value::Chars(s) = f.get_value() {
+                            Some(s.to_string())
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_default()
+            };
+            return (get("subject"), get("action"), get("object"), get("status"));
         }
         Default::default()
     }
 
-    #[test]
-    fn test_extract_subject_object() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_extract_subject_object() {
         enable_semantic();
         let cache = &mut FieldQueryCache::default();
         let data = vec![
@@ -761,8 +761,8 @@ mod tests {
         S8  =  pipe read(M8) | extract_subject_object ;
         S9  =  pipe read(M9) | extract_subject_object ;
          "#;
-        let model = oml_parse_raw(&mut conf).assert();
-        let target = model.transform(src, cache);
+        let model = oml_parse_raw(&mut conf).await.assert();
+        let target = model.transform_async(src, cache).await;
 
         // 输出所有结果
         for name in ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9"] {
@@ -980,8 +980,8 @@ mod tests {
         },
     ];
 
-    #[test]
-    fn test_accuracy() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_accuracy() {
         enable_semantic();
         let cache = &mut FieldQueryCache::default();
 
@@ -1011,8 +1011,8 @@ mod tests {
                 result = pipe read(msg) | extract_subject_object ;
                 "#;
 
-            let model = oml_parse_raw(&mut conf).assert();
-            let target = model.transform(src, cache);
+            let model = oml_parse_raw(&mut conf).await.assert();
+            let target = model.transform_async(src, cache).await;
 
             let (subject, action, object, status) = get_saso(&target, "result");
 
@@ -1119,8 +1119,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_debug_mode() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_debug_mode() {
         enable_semantic();
         use super::analyze_subject_object_with_debug;
 

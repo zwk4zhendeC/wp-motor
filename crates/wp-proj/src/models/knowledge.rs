@@ -110,6 +110,17 @@ mod tests {
             "knowdb.toml 应该存在"
         );
         assert!(models_dir.join("example").exists(), "example 目录应该存在");
+
+        let knowdb =
+            std::fs::read_to_string(models_dir.join("knowdb.toml")).expect("read knowdb.toml");
+        assert!(
+            knowdb.contains("kind = \"postgres\""),
+            "knowdb.toml 应该包含 PostgreSQL provider 示例"
+        );
+        assert!(
+            knowdb.contains("${SEC_PWD}"),
+            "knowdb.toml 应该使用环境变量密码占位"
+        );
     }
 
     #[test]

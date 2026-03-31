@@ -24,7 +24,7 @@ pub(crate) mod test_helpers;
 mod test_utils;
 pub mod types;
 
-pub use core::{DataRecordRef, ExpEvaluator};
+pub use core::{AsyncDataTransformer, AsyncExpEvaluator, AsyncFieldExtractor, DataRecordRef};
 pub use parser::oml_parse_raw;
 
 // 导出语义词典相关的公开 API

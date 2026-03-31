@@ -19,15 +19,15 @@ impl ValueProcessor for Ip4ToInt {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::DataTransformer;
+    use crate::core::AsyncDataTransformer;
     use crate::parser::oml_parse_raw;
     use orion_error::TestAssert;
     use std::net::{IpAddr, Ipv4Addr};
     use wp_knowledge::cache::FieldQueryCache;
     use wp_model_core::model::{DataField, DataRecord, FieldStorage};
 
-    #[test]
-    fn test_pipe_ip4_int() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_pipe_ip4_int() {
         let cache = &mut FieldQueryCache::default();
         let data = vec![FieldStorage::from_owned(DataField::from_ip(
             "src_ip",
@@ -40,8 +40,8 @@ mod tests {
         ---
         X  =  pipe  read(src_ip) | ip4_to_int ;
          "#;
-        let model = oml_parse_raw(&mut conf).assert();
-        let target = model.transform(src, cache);
+        let model = oml_parse_raw(&mut conf).await.assert();
+        let target = model.transform_async(src, cache).await;
         let expect = DataField::from_digit("X".to_string(), 2130706433);
         assert_eq!(target.field("X").map(|s| s.as_field()), Some(&expect));
     }

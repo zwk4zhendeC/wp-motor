@@ -1,3 +1,4 @@
+use crate::core::AsyncFieldExtractor;
 use crate::language::prelude::*;
 use crate::language::syntax::accessors::nested::arr::ArrOperation;
 use crate::language::syntax::functions::FunOperation;
@@ -9,8 +10,10 @@ use crate::language::syntax::operations::matchs::MatchOperation;
 use crate::language::syntax::operations::pipe::PiPeOperation;
 use crate::language::syntax::operations::record::RecordOperation;
 use crate::language::syntax::operations::sql::SqlQuery;
+use async_trait::async_trait;
 use std::sync::Arc;
-use wp_model_core::model::FieldStorage;
+use wp_knowledge::cache::FieldQueryCache;
+use wp_model_core::model::{DataField, FieldStorage, Value};
 
 #[derive(Default, Builder, Clone, Getters, Debug)]
 #[builder(setter(into))]
@@ -91,25 +94,98 @@ impl Display for PreciseEvaluator {
     }
 }
 
-impl FieldExtractor for DataField {
-    fn extract_one(
+pub(crate) fn data_field_extract_one(
+    field: &DataField,
+    _target: &EvaluationTarget,
+    _src: &mut DataRecordRef<'_>,
+    _dst: &DataRecord,
+) -> Option<DataField> {
+    Some(field.clone())
+}
+
+pub(crate) fn data_field_extract_storage(
+    field: &DataField,
+    target: &EvaluationTarget,
+    src: &mut DataRecordRef<'_>,
+    dst: &DataRecord,
+) -> Option<FieldStorage> {
+    data_field_extract_one(field, target, src, dst).map(FieldStorage::from_owned)
+}
+
+pub(crate) fn data_field_extract_more(
+    _field: &DataField,
+    _src: &mut DataRecordRef<'_>,
+    _dst: &DataRecord,
+    _cache: &mut FieldQueryCache,
+) -> Vec<DataField> {
+    Vec::new()
+}
+
+pub(crate) fn data_field_support_batch(_field: &DataField) -> bool {
+    false
+}
+
+pub(crate) fn value_extract_one(
+    value: &Value,
+    target: &EvaluationTarget,
+    _src: &mut DataRecordRef<'_>,
+    _dst: &DataRecord,
+) -> Option<DataField> {
+    Some(DataField::new(
+        DataType::Auto,
+        target.safe_name(),
+        value.clone(),
+    ))
+}
+
+pub(crate) fn value_extract_storage(
+    value: &Value,
+    target: &EvaluationTarget,
+    src: &mut DataRecordRef<'_>,
+    dst: &DataRecord,
+) -> Option<FieldStorage> {
+    value_extract_one(value, target, src, dst).map(FieldStorage::from_owned)
+}
+
+pub(crate) fn value_extract_more(
+    _value: &Value,
+    _src: &mut DataRecordRef<'_>,
+    _dst: &DataRecord,
+    _cache: &mut FieldQueryCache,
+) -> Vec<DataField> {
+    Vec::new()
+}
+
+pub(crate) fn value_support_batch(_value: &Value) -> bool {
+    false
+}
+
+#[async_trait]
+impl AsyncFieldExtractor for DataField {
+    async fn extract_one_async(
         &self,
-        _target: &EvaluationTarget,
-        _src: &mut DataRecordRef<'_>,
-        _dst: &DataRecord,
+        target: &EvaluationTarget,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
     ) -> Option<DataField> {
-        let obj = self.clone();
-        //obj.set_name(target.safe_name());
-        Some(obj)
+        data_field_extract_one(self, target, src, dst)
     }
 
-    fn extract_storage(
+    async fn extract_storage_async(
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
         dst: &DataRecord,
     ) -> Option<FieldStorage> {
-        self.extract_one(target, src, dst)
-            .map(FieldStorage::from_owned)
+        data_field_extract_storage(self, target, src, dst)
+    }
+
+    async fn extract_more_async(
+        &self,
+        _src: &mut DataRecordRef<'_>,
+        _dst: &DataRecord,
+        _cache: &mut FieldQueryCache,
+    ) -> Vec<DataField> {
+        data_field_extract_more(self, _src, _dst, _cache)
     }
 }

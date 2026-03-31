@@ -1,12 +1,14 @@
 use crate::core::diagnostics::{self, OmlIssue, OmlIssueKind};
+use crate::core::evaluator::traits::AsyncExpEvaluator;
 use crate::core::prelude::*;
 use crate::language::BatchEvalTarget;
 use crate::language::{BatchEvalExp, BatchEvaluation, RecordOperation};
+use async_trait::async_trait;
 use wp_knowledge::cache::FieldQueryCache;
 use wp_model_core::model::{DataField, DataRecord, FieldStorage};
 
-impl ExpEvaluator for BatchEvalExp {
-    fn eval_proc(
+impl BatchEvalExp {
+    pub(crate) fn eval_proc(
         &self,
         src: &mut DataRecordRef<'_>,
         dst: &mut DataRecord,
@@ -26,6 +28,18 @@ impl ExpEvaluator for BatchEvalExp {
         let mut wrapped_needs: Vec<FieldStorage> =
             needs.into_iter().map(FieldStorage::from_owned).collect();
         dst.items.append(&mut wrapped_needs);
+    }
+}
+
+#[async_trait]
+impl AsyncExpEvaluator for BatchEvalExp {
+    async fn eval_proc_async(
+        &self,
+        src: &mut DataRecordRef<'_>,
+        dst: &mut DataRecord,
+        cache: &mut FieldQueryCache,
+    ) {
+        self.eval_proc(src, dst, cache);
     }
 }
 
@@ -67,7 +81,6 @@ impl BatchFetcher for RecordOperation {
 #[cfg(test)]
 mod tests {
     use crate::core::DataRecordRef;
-    use crate::core::evaluator::traits::ExpEvaluator;
     use crate::language::BatchEvalExp;
     use wp_knowledge::cache::FieldQueryCache;
     use wp_model_core::model::{DataField, DataRecord, DataType, FieldStorage};

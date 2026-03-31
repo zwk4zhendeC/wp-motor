@@ -1,10 +1,12 @@
-use crate::core::FieldExtractor;
+use crate::core::AsyncFieldExtractor;
 use crate::core::prelude::*;
 use crate::language::{BuiltinFunction, FunOperation, NowDate, NowHour, NowTime};
+use async_trait::async_trait;
 use chrono::{Datelike, Local, Timelike};
 use wp_model_core::model::FieldStorage;
-impl FieldExtractor for NowTime {
-    fn extract_one(
+#[allow(dead_code)]
+impl NowTime {
+    pub(crate) fn extract_one(
         &self,
         target: &EvaluationTarget,
         _src: &mut DataRecordRef<'_>,
@@ -15,7 +17,7 @@ impl FieldExtractor for NowTime {
         Some(DataField::from_time(name, now.naive_local()))
     }
 
-    fn extract_storage(
+    pub(crate) fn extract_storage(
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
@@ -24,10 +26,45 @@ impl FieldExtractor for NowTime {
         self.extract_one(target, src, dst)
             .map(FieldStorage::from_owned)
     }
+
+    pub(crate) fn support_batch(&self) -> bool {
+        false
+    }
 }
 
-impl FieldExtractor for FunOperation {
-    fn extract_one(
+#[async_trait]
+impl AsyncFieldExtractor for NowTime {
+    async fn extract_one_async(
+        &self,
+        target: &EvaluationTarget,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
+    ) -> Option<DataField> {
+        self.extract_one(target, src, dst)
+    }
+
+    async fn extract_storage_async(
+        &self,
+        target: &EvaluationTarget,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
+    ) -> Option<FieldStorage> {
+        self.extract_storage(target, src, dst)
+    }
+
+    async fn extract_more_async(
+        &self,
+        _src: &mut DataRecordRef<'_>,
+        _dst: &DataRecord,
+        _cache: &mut FieldQueryCache,
+    ) -> Vec<DataField> {
+        Vec::new()
+    }
+}
+
+#[allow(dead_code)]
+impl FunOperation {
+    pub(crate) fn extract_one(
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
@@ -36,7 +73,7 @@ impl FieldExtractor for FunOperation {
         self.fun().extract_one(target, src, dst)
     }
 
-    fn extract_storage(
+    pub(crate) fn extract_storage(
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
@@ -45,10 +82,45 @@ impl FieldExtractor for FunOperation {
         self.extract_one(target, src, dst)
             .map(FieldStorage::from_owned)
     }
+
+    pub(crate) fn extract_more(
+        &self,
+        _src: &mut DataRecordRef<'_>,
+        _dst: &DataRecord,
+        _cache: &mut FieldQueryCache,
+    ) -> Vec<DataField> {
+        Vec::new()
+    }
+
+    pub(crate) fn support_batch(&self) -> bool {
+        false
+    }
 }
 
-impl FieldExtractor for BuiltinFunction {
-    fn extract_one(
+#[async_trait]
+impl AsyncFieldExtractor for FunOperation {
+    async fn extract_one_async(
+        &self,
+        target: &EvaluationTarget,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
+    ) -> Option<DataField> {
+        self.fun().extract_one_async(target, src, dst).await
+    }
+
+    async fn extract_storage_async(
+        &self,
+        target: &EvaluationTarget,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
+    ) -> Option<FieldStorage> {
+        self.fun().extract_storage_async(target, src, dst).await
+    }
+}
+
+#[allow(dead_code)]
+impl BuiltinFunction {
+    pub(crate) fn extract_one(
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
@@ -61,7 +133,7 @@ impl FieldExtractor for BuiltinFunction {
         }
     }
 
-    fn extract_storage(
+    pub(crate) fn extract_storage(
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
@@ -70,9 +142,52 @@ impl FieldExtractor for BuiltinFunction {
         self.extract_one(target, src, dst)
             .map(FieldStorage::from_owned)
     }
+
+    pub(crate) fn extract_more(
+        &self,
+        _src: &mut DataRecordRef<'_>,
+        _dst: &DataRecord,
+        _cache: &mut FieldQueryCache,
+    ) -> Vec<DataField> {
+        Vec::new()
+    }
+
+    pub(crate) fn support_batch(&self) -> bool {
+        false
+    }
 }
-impl FieldExtractor for NowDate {
-    fn extract_one(
+
+#[async_trait]
+impl AsyncFieldExtractor for BuiltinFunction {
+    async fn extract_one_async(
+        &self,
+        target: &EvaluationTarget,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
+    ) -> Option<DataField> {
+        match self {
+            BuiltinFunction::NowTime(x) => x.extract_one_async(target, src, dst).await,
+            BuiltinFunction::NowDate(x) => x.extract_one_async(target, src, dst).await,
+            BuiltinFunction::NowHour(x) => x.extract_one_async(target, src, dst).await,
+        }
+    }
+
+    async fn extract_storage_async(
+        &self,
+        target: &EvaluationTarget,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
+    ) -> Option<FieldStorage> {
+        match self {
+            BuiltinFunction::NowTime(x) => x.extract_storage_async(target, src, dst).await,
+            BuiltinFunction::NowDate(x) => x.extract_storage_async(target, src, dst).await,
+            BuiltinFunction::NowHour(x) => x.extract_storage_async(target, src, dst).await,
+        }
+    }
+}
+#[allow(dead_code)]
+impl NowDate {
+    pub(crate) fn extract_one(
         &self,
         target: &EvaluationTarget,
         _src: &mut DataRecordRef<'_>,
@@ -87,7 +202,7 @@ impl FieldExtractor for NowDate {
         ))
     }
 
-    fn extract_storage(
+    pub(crate) fn extract_storage(
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
@@ -96,10 +211,45 @@ impl FieldExtractor for NowDate {
         self.extract_one(target, src, dst)
             .map(FieldStorage::from_owned)
     }
+
+    pub(crate) fn support_batch(&self) -> bool {
+        false
+    }
 }
 
-impl FieldExtractor for NowHour {
-    fn extract_one(
+#[async_trait]
+impl AsyncFieldExtractor for NowDate {
+    async fn extract_one_async(
+        &self,
+        target: &EvaluationTarget,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
+    ) -> Option<DataField> {
+        self.extract_one(target, src, dst)
+    }
+
+    async fn extract_storage_async(
+        &self,
+        target: &EvaluationTarget,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
+    ) -> Option<FieldStorage> {
+        self.extract_storage(target, src, dst)
+    }
+
+    async fn extract_more_async(
+        &self,
+        _src: &mut DataRecordRef<'_>,
+        _dst: &DataRecord,
+        _cache: &mut FieldQueryCache,
+    ) -> Vec<DataField> {
+        Vec::new()
+    }
+}
+
+#[allow(dead_code)]
+impl NowHour {
+    pub(crate) fn extract_one(
         &self,
         target: &EvaluationTarget,
         _src: &mut DataRecordRef<'_>,
@@ -117,7 +267,7 @@ impl FieldExtractor for NowHour {
         ))
     }
 
-    fn extract_storage(
+    pub(crate) fn extract_storage(
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
@@ -126,18 +276,52 @@ impl FieldExtractor for NowHour {
         self.extract_one(target, src, dst)
             .map(FieldStorage::from_owned)
     }
+
+    pub(crate) fn support_batch(&self) -> bool {
+        false
+    }
+}
+
+#[async_trait]
+impl AsyncFieldExtractor for NowHour {
+    async fn extract_one_async(
+        &self,
+        target: &EvaluationTarget,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
+    ) -> Option<DataField> {
+        self.extract_one(target, src, dst)
+    }
+
+    async fn extract_storage_async(
+        &self,
+        target: &EvaluationTarget,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
+    ) -> Option<FieldStorage> {
+        self.extract_storage(target, src, dst)
+    }
+
+    async fn extract_more_async(
+        &self,
+        _src: &mut DataRecordRef<'_>,
+        _dst: &DataRecord,
+        _cache: &mut FieldQueryCache,
+    ) -> Vec<DataField> {
+        Vec::new()
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::core::DataTransformer;
+    use crate::core::AsyncDataTransformer;
     use crate::parser::oml_parse_raw;
     use orion_error::TestAssertWithMsg;
     use wp_knowledge::cache::FieldQueryCache;
     use wp_model_core::model::{DataField, DataRecord, FieldStorage};
 
-    #[test]
-    fn test_pipe() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_pipe() {
         let cache = &mut FieldQueryCache::default();
         let data = vec![
             FieldStorage::from_owned(DataField::from_chars("A1", "hello1")),
@@ -154,9 +338,9 @@ mod tests {
         X2 =  Now::time() ;
         X3 =  Now::hour() ;
          "#;
-        let model = oml_parse_raw(&mut conf).assert("oml_conf");
+        let model = oml_parse_raw(&mut conf).await.assert("oml_conf");
 
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
 
         assert!(target.field("X").is_some());
         println!("{}", target);

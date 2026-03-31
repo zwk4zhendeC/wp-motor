@@ -18,8 +18,8 @@ use wp_model_core::model::fmt_def::TextFmt;
 use wp_model_core::model::{DataRecord, Value};
 use wp_stat::{ReportVariant, StatReq, StatStage, StatTarget};
 
-#[test]
-fn test_tags_injection_into_record() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_tags_injection_into_record() {
     // Build a sink conf with tags
     let mut sconf = SinkInstanceConf::null_new("t1".to_string(), TextFmt::Json, None);
     sconf.set_tags(vec![
@@ -49,15 +49,19 @@ fn test_tags_injection_into_record() {
     let rule = crate::sinks::ProcMeta::Rule("/test/rule".to_string());
     let fds = Arc::new(DataRecord::default());
 
-    // Call the path where tags injection happens
+    let batch = vec![SinkRecUnit::with_record(
+        pkg_id,
+        rule.clone(),
+        Arc::clone(&fds),
+    )];
     let out = disp
-        .oml_proc(pkg_id, &infra, &mut cache, &rule, fds)
+        .oml_proc_batch_async(batch, &infra, &mut cache, &rule)
+        .await
         .unwrap();
     assert_eq!(out.len(), 1);
-    let (_rt, rec) = &out[0];
+    assert_eq!(out[0].len(), 1);
+    let rec = out[0][0].data();
     // Expect keys injected as top-level fields
-    // Since rec is now Record<Value>, we access values by index
-    let rec = rec.as_ref();
     assert!(rec.items.len() >= 3);
     // Check that the expected values are present
     let values: Vec<&Value> = rec.items.iter().map(|f| f.get_value()).collect();
@@ -66,8 +70,8 @@ fn test_tags_injection_into_record() {
     assert!(values.contains(&&Value::from("true"))); // flag value
 }
 
-#[test]
-fn filter_expect_true_routes_on_true() {
+#[tokio::test(flavor = "current_thread")]
+async fn filter_expect_true_routes_on_true() {
     // Build sink with cond: $flag == chars(yes), expect true
     let mut sconf =
         wp_conf::structure::SinkInstanceConf::null_new("t2".to_string(), TextFmt::Json, None);
@@ -93,20 +97,17 @@ fn filter_expect_true_routes_on_true() {
     let rule = crate::sinks::ProcMeta::Rule("/r".to_string());
     let mut rec = DataRecord::default();
     rec.append(wp_model_core::model::DataField::from_chars("flag", "yes"));
+    let batch = vec![SinkRecUnit::with_record(1, rule.clone(), Arc::new(rec))];
     let out = disp
-        .oml_proc(
-            1,
-            &InfraSinkAgent::use_null(),
-            &mut cache,
-            &rule,
-            rec.into(),
-        )
+        .oml_proc_batch_async(batch, &InfraSinkAgent::use_null(), &mut cache, &rule)
+        .await
         .unwrap();
     assert_eq!(out.len(), 1);
+    assert_eq!(out[0].len(), 1);
 }
 
-#[test]
-fn filter_expect_false_routes_on_false() {
+#[tokio::test(flavor = "current_thread")]
+async fn filter_expect_false_routes_on_false() {
     // Build sink with cond: $flag == chars(yes), expect false => deliver when flag != yes
     let mut sconf =
         wp_conf::structure::SinkInstanceConf::null_new("t3".to_string(), TextFmt::Json, None);
@@ -132,20 +133,17 @@ fn filter_expect_false_routes_on_false() {
     let rule = crate::sinks::ProcMeta::Rule("/r".to_string());
     let mut rec = DataRecord::default();
     rec.append(wp_model_core::model::DataField::from_chars("flag", "no"));
+    let batch = vec![SinkRecUnit::with_record(1, rule.clone(), Arc::new(rec))];
     let out = disp
-        .oml_proc(
-            1,
-            &InfraSinkAgent::use_null(),
-            &mut cache,
-            &rule,
-            rec.into(),
-        )
+        .oml_proc_batch_async(batch, &InfraSinkAgent::use_null(), &mut cache, &rule)
+        .await
         .unwrap();
     assert_eq!(out.len(), 1);
+    assert_eq!(out[0].len(), 1);
 }
 
-#[test]
-fn fast_path_handles_multiple_sinks_without_transform() {
+#[tokio::test(flavor = "current_thread")]
+async fn fast_path_handles_multiple_sinks_without_transform() {
     use wp_model_core::model::DataField;
 
     let sink_conf1 = SinkInstanceConf::null_new("s1".to_string(), TextFmt::Json, None);
@@ -180,26 +178,27 @@ fn fast_path_handles_multiple_sinks_without_transform() {
     let shared = Arc::new(record);
     let rule = crate::sinks::ProcMeta::Rule("/fast".to_string());
     let mut cache = FieldQueryCache::default();
+    let batch = vec![SinkRecUnit::with_record(
+        1,
+        rule.clone(),
+        Arc::clone(&shared),
+    )];
     let outputs = disp
-        .oml_proc(
-            1,
-            &InfraSinkAgent::use_null(),
-            &mut cache,
-            &rule,
-            Arc::clone(&shared),
-        )
+        .oml_proc_batch_async(batch, &InfraSinkAgent::use_null(), &mut cache, &rule)
+        .await
         .unwrap();
 
     assert_eq!(outputs.len(), 2);
-    // 第一条 sink 直接复用输入 Arc
-    assert!(Arc::ptr_eq(&shared, &outputs[0].1));
+    assert_eq!(outputs[0].len(), 1);
+    assert_eq!(outputs[1].len(), 1);
+    assert!(Arc::ptr_eq(&shared, outputs[0][0].data()));
     // 第二条 sink 需要 tags，应获得新的实例
-    assert!(!Arc::ptr_eq(&shared, &outputs[1].1));
-    assert!(outputs[1].1.items.len() > shared.items.len());
+    assert!(!Arc::ptr_eq(&shared, outputs[1][0].data()));
+    assert!(outputs[1][0].data().items.len() > shared.items.len());
 }
 
-#[test]
-fn batch_fast_path_replicates_records_with_tags() {
+#[tokio::test(flavor = "current_thread")]
+async fn batch_fast_path_replicates_records_with_tags() {
     use wp_model_core::model::DataField;
 
     let sink_conf1 = SinkInstanceConf::null_new("s1".to_string(), TextFmt::Json, None);
@@ -241,7 +240,8 @@ fn batch_fast_path_replicates_records_with_tags() {
 
     let mut cache = FieldQueryCache::default();
     let outputs = disp
-        .oml_proc_batch(batch, &InfraSinkAgent::use_null(), &mut cache, &rule)
+        .oml_proc_batch_async(batch, &InfraSinkAgent::use_null(), &mut cache, &rule)
+        .await
         .unwrap();
 
     assert_eq!(outputs.len(), 2);
@@ -252,8 +252,8 @@ fn batch_fast_path_replicates_records_with_tags() {
     assert_eq!(outputs[1][0].data().items.len(), base_len + 1);
 }
 
-#[test]
-fn batch_routing_respects_sink_conditions() {
+#[tokio::test(flavor = "current_thread")]
+async fn batch_routing_respects_sink_conditions() {
     use wp_model_core::model::DataField;
 
     let mut sconf_true = SinkInstanceConf::null_new("s_true".to_string(), TextFmt::Json, None);
@@ -297,7 +297,8 @@ fn batch_routing_respects_sink_conditions() {
 
     let mut cache = FieldQueryCache::default();
     let outputs = disp
-        .oml_proc_batch(batch, &InfraSinkAgent::use_null(), &mut cache, &rule)
+        .oml_proc_batch_async(batch, &InfraSinkAgent::use_null(), &mut cache, &rule)
+        .await
         .unwrap();
 
     assert_eq!(outputs.len(), 2);
@@ -307,8 +308,8 @@ fn batch_routing_respects_sink_conditions() {
     assert_eq!(outputs[1][0].id(), &11);
 }
 
-#[test]
-fn batch_oml_transforms_records_for_all_sinks() {
+#[tokio::test(flavor = "current_thread")]
+async fn batch_oml_transforms_records_for_all_sinks() {
     use wp_model_core::model::DataField;
 
     let mut sink_res = SinkResUnit::use_null();
@@ -319,7 +320,7 @@ rule :
 ---
 converted : chars = chars(done) ;
 "#;
-    let model = oml_parse_raw(&mut code).expect("parse oml model");
+    let model = oml_parse_raw(&mut code).await.expect("parse oml model");
     sink_res.push_model(DataModel::Object(model));
 
     let mut group = FlexGroup::default();
@@ -362,7 +363,83 @@ converted : chars = chars(done) ;
 
     let mut cache = FieldQueryCache::default();
     let outputs = dispatcher
-        .oml_proc_batch(batch, &InfraSinkAgent::use_null(), &mut cache, &rule)
+        .oml_proc_batch_async(batch, &InfraSinkAgent::use_null(), &mut cache, &rule)
+        .await
+        .unwrap();
+
+    assert_eq!(outputs.len(), 2);
+    for (idx, units) in outputs.iter().enumerate() {
+        assert_eq!(units.len(), 2);
+        for unit in units {
+            let record = unit.data();
+            let converted = record.get_value("converted");
+            assert!(matches!(converted, Some(Value::Chars(v)) if v == "done"));
+            if idx == 0 {
+                assert_eq!(record.items.len(), 1);
+            } else {
+                assert_eq!(record.items.len(), 2);
+            }
+        }
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn batch_oml_transforms_records_for_all_sinks_async() {
+    use wp_model_core::model::DataField;
+
+    let mut sink_res = SinkResUnit::use_null();
+    let mut code = r#"
+name : batch_oml_model_async
+rule :
+    /batch/oml_async
+---
+converted : chars = chars(done) ;
+"#;
+    let model = oml_parse_raw(&mut code).await.expect("parse oml model");
+    sink_res.push_model(DataModel::Object(model));
+
+    let mut group = FlexGroup::default();
+    group.name = "oml_async".to_string();
+    let mut dispatcher = SinkDispatcher::new(SinkGroupConf::Flexi(group), sink_res);
+
+    let sink_conf_a = SinkInstanceConf::null_new("sink_a".to_string(), TextFmt::Json, None);
+    let sink_a = SinkRuntime::new(
+        "./rescue".to_string(),
+        "sink_a".to_string(),
+        sink_conf_a,
+        SinkBackendType::Proxy(crate::sinks::builtin_factories::make_blackhole_sink()),
+        None,
+        Vec::new(),
+    );
+
+    let mut sink_conf_b = SinkInstanceConf::null_new("sink_b".to_string(), TextFmt::Json, None);
+    sink_conf_b.set_tags(vec!["cluster: b".to_string()]);
+    let sink_b = SinkRuntime::new(
+        "./rescue".to_string(),
+        "sink_b".to_string(),
+        sink_conf_b,
+        SinkBackendType::Proxy(crate::sinks::builtin_factories::make_blackhole_sink()),
+        None,
+        Vec::new(),
+    );
+
+    dispatcher.append(sink_a);
+    dispatcher.append(sink_b);
+
+    let rule = crate::sinks::ProcMeta::Rule("/batch/oml_async".to_string());
+    let mut rec1 = DataRecord::default();
+    rec1.append(DataField::from_chars("src", "alpha"));
+    let mut rec2 = DataRecord::default();
+    rec2.append(DataField::from_chars("src", "beta"));
+    let batch = vec![
+        SinkRecUnit::with_record(1, rule.clone(), Arc::new(rec1)),
+        SinkRecUnit::with_record(2, rule.clone(), Arc::new(rec2)),
+    ];
+
+    let mut cache = FieldQueryCache::default();
+    let outputs = dispatcher
+        .oml_proc_batch_async(batch, &InfraSinkAgent::use_null(), &mut cache, &rule)
+        .await
         .unwrap();
 
     assert_eq!(outputs.len(), 2);

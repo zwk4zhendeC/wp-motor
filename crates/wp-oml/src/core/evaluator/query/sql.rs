@@ -1,13 +1,54 @@
 use crate::core::prelude::*;
 use crate::language::EvaluationTarget;
 use crate::language::SqlQuery;
-use wp_know::mem::{SqlNamedParam, ToSqlParams};
+use async_trait::async_trait;
 use wp_knowledge::facade as kdb;
 use wp_model_core::model::FieldStorage;
 
-impl FieldExtractor for SqlQuery {
+use crate::core::AsyncFieldExtractor;
+
+// SQL evaluator already places the SQL md5 into c_params[0], so a separate scope hash
+// would only duplicate the same partitioning work on the local-cache hot path.
+const INLINE_SQL_LOCAL_CACHE_SCOPE: u64 = 0;
+
+fn norm_query_field(field: &DataField) -> DataField {
+    use wp_model_core::model::DataType;
+    DataField::new(
+        DataType::default(),
+        field.clone_name(),
+        field.get_value().clone(),
+    )
+}
+
+fn collect_sql_params(
+    query: &SqlQuery,
+    src: &mut DataRecordRef<'_>,
+    dst: &DataRecord,
+) -> (String, DataField, Vec<DataField>) {
+    let mut params = Vec::with_capacity(5);
+    let target = EvaluationTarget::auto_default();
+    for (v, acq) in query.vars() {
+        if let Some(storage) = acq.extract_storage(&target, src, dst) {
+            let mut tdo = storage.into_owned();
+            tdo.set_name(format!(":{}", v));
+            params.push(tdo);
+        }
+    }
+    debug_kdb!("pararms:{:#?}", params);
+    let sql = query.oml_sql().to_string();
+    debug_kdb!("[sql] {}", sql);
+    for (v, acq) in query.vars() {
+        let preview = acq.diy_fmt(&wp_data_fmt::SqlInsert::new_with_json("_"));
+        debug_kdb!("[param] :{} = {}", v, preview);
+    }
+    let md5 = DataField::from_chars("sql".to_string(), query.sql_md5().clone());
+    (sql, md5, params)
+}
+
+#[allow(dead_code)]
+impl SqlQuery {
     #[allow(unused_variables)]
-    fn extract_one(
+    pub(crate) fn extract_one(
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
@@ -17,7 +58,7 @@ impl FieldExtractor for SqlQuery {
         None
     }
 
-    fn extract_storage(
+    pub(crate) fn extract_storage(
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
@@ -27,135 +68,129 @@ impl FieldExtractor for SqlQuery {
             .map(FieldStorage::from_owned)
     }
 
-    fn extract_more(
+    pub(crate) fn extract_more(
         &self,
         src: &mut DataRecordRef<'_>,
         dst: &DataRecord,
         cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
-        let mut params = Vec::with_capacity(5);
-        let target = EvaluationTarget::auto_default();
-        for (v, acq) in self.vars() {
-            // Use extract_storage to preserve zero-copy for Arc variants
-            if let Some(storage) = acq.extract_storage(&target, src, dst) {
-                let mut tdo = storage.into_owned();
-                tdo.set_name(format!(":{}", v));
-                params.push(tdo);
-            }
-        }
-        debug_kdb!("pararms:{:#?}", params);
-        let sql = self.oml_sql();
-        debug_kdb!("[sql] {}", sql);
-        for (v, acq) in self.vars() {
-            let preview = acq.diy_fmt(&wp_data_fmt::SqlInsert::new_with_json("_"));
-            debug_kdb!("[param] :{} = {}", v, preview);
-        }
-        let md5 = DataField::from_chars("sql".to_string(), self.sql_md5().clone());
-        // 规范化缓存键：仅保留 Value/名称，Meta 统一为 Auto，减少“同值不同 meta”导致的缓存碎片
-        fn norm(f: &DataField) -> DataField {
-            use wp_model_core::model::DataType;
-            DataField::new(DataType::default(), f.clone_name(), f.get_value().clone())
-        }
+        let (sql, md5, params) = collect_sql_params(self, src, dst);
 
         match params.len() {
             0 => {
-                let c_params: [DataField; 1] = [norm(&md5)];
-                // 无命名参数：传递空切片
-                let out = kdb::cache_query(sql, &c_params, &[], cache);
+                let c_params: [DataField; 1] = [norm_query_field(&md5)];
+                let out = kdb::cache_query_fields_with_scope(
+                    sql.as_str(),
+                    INLINE_SQL_LOCAL_CACHE_SCOPE,
+                    &c_params,
+                    &[],
+                    cache,
+                );
                 debug_kdb!("[sql] got {} cols", out.len());
                 out
             }
 
             1 => {
-                let c_params: [DataField; 2] = [norm(&md5), norm(&params[0])];
-                let _p0 = params.remove(0);
-                let q_params: [SqlNamedParam; 1] = [SqlNamedParam(c_params[1].clone())];
-                let q_p = &q_params.to_params();
-                let out = kdb::cache_query(sql, &c_params, q_p, cache);
+                let c_params: [DataField; 2] =
+                    [norm_query_field(&md5), norm_query_field(&params[0])];
+                let query_params = [c_params[1].clone()];
+                let out = kdb::cache_query_fields_with_scope(
+                    sql.as_str(),
+                    INLINE_SQL_LOCAL_CACHE_SCOPE,
+                    &c_params,
+                    &query_params,
+                    cache,
+                );
                 debug_kdb!("[sql] got {} cols", out.len());
                 out
             }
             2 => {
-                let c_params: [DataField; 3] = [norm(&md5), norm(&params[1]), norm(&params[0])];
-                let _ = (params.remove(1), params.remove(0));
-                let q_params: [SqlNamedParam; 2] = [
-                    SqlNamedParam(c_params[1].clone()),
-                    SqlNamedParam(c_params[2].clone()),
+                let c_params: [DataField; 3] = [
+                    norm_query_field(&md5),
+                    norm_query_field(&params[1]),
+                    norm_query_field(&params[0]),
                 ];
-                let q_p = &q_params.to_params();
-                let out = kdb::cache_query(sql, &c_params, q_p, cache);
+                let query_params = [c_params[1].clone(), c_params[2].clone()];
+                let out = kdb::cache_query_fields_with_scope(
+                    sql.as_str(),
+                    INLINE_SQL_LOCAL_CACHE_SCOPE,
+                    &c_params,
+                    &query_params,
+                    cache,
+                );
                 debug_kdb!("[sql] got {} cols", out.len());
                 out
             }
             3 => {
                 let c_params: [DataField; 4] = [
-                    norm(&md5),
-                    norm(&params[2]),
-                    norm(&params[1]),
-                    norm(&params[0]),
+                    norm_query_field(&md5),
+                    norm_query_field(&params[2]),
+                    norm_query_field(&params[1]),
+                    norm_query_field(&params[0]),
                 ];
-                let _ = (params.remove(2), params.remove(1), params.remove(0));
-                let q_params: [SqlNamedParam; 3] = [
-                    SqlNamedParam(c_params[1].clone()),
-                    SqlNamedParam(c_params[2].clone()),
-                    SqlNamedParam(c_params[3].clone()),
+                let query_params = [
+                    c_params[1].clone(),
+                    c_params[2].clone(),
+                    c_params[3].clone(),
                 ];
-                let q_p = &q_params.to_params();
-                let out = kdb::cache_query(sql, &c_params, q_p, cache);
-                println!("[sql] got {} cols", out.len());
+                let out = kdb::cache_query_fields_with_scope(
+                    sql.as_str(),
+                    INLINE_SQL_LOCAL_CACHE_SCOPE,
+                    &c_params,
+                    &query_params,
+                    cache,
+                );
+                debug_kdb!("[sql] got {} cols", out.len());
                 out
             }
             4 => {
                 // 显式构造，避免 try_into().unwrap() 带来的运行期 panic 风险
                 let c_params: [DataField; 5] = [
-                    norm(&md5),
-                    norm(&params[3]),
-                    norm(&params[2]),
-                    norm(&params[1]),
-                    norm(&params[0]),
+                    norm_query_field(&md5),
+                    norm_query_field(&params[3]),
+                    norm_query_field(&params[2]),
+                    norm_query_field(&params[1]),
+                    norm_query_field(&params[0]),
                 ];
-                let _ = (
-                    params.remove(3),
-                    params.remove(2),
-                    params.remove(1),
-                    params.remove(0),
+                let query_params = [
+                    c_params[1].clone(),
+                    c_params[2].clone(),
+                    c_params[3].clone(),
+                    c_params[4].clone(),
+                ];
+                let out = kdb::cache_query_fields_with_scope(
+                    sql.as_str(),
+                    INLINE_SQL_LOCAL_CACHE_SCOPE,
+                    &c_params,
+                    &query_params,
+                    cache,
                 );
-                let q_params: [SqlNamedParam; 4] = [
-                    SqlNamedParam(c_params[1].clone()),
-                    SqlNamedParam(c_params[2].clone()),
-                    SqlNamedParam(c_params[3].clone()),
-                    SqlNamedParam(c_params[4].clone()),
-                ];
-                let q_p = &q_params.to_params();
-                let out = kdb::cache_query(self.oml_sql(), &c_params, q_p, cache);
                 debug_kdb!("[sql] got {} cols", out.len());
                 out
             }
             5 => {
                 let c_params: [DataField; 6] = [
-                    norm(&md5),
-                    norm(&params[4]),
-                    norm(&params[3]),
-                    norm(&params[2]),
-                    norm(&params[1]),
-                    norm(&params[0]),
+                    norm_query_field(&md5),
+                    norm_query_field(&params[4]),
+                    norm_query_field(&params[3]),
+                    norm_query_field(&params[2]),
+                    norm_query_field(&params[1]),
+                    norm_query_field(&params[0]),
                 ];
-                let _ = (
-                    params.remove(4),
-                    params.remove(3),
-                    params.remove(2),
-                    params.remove(1),
-                    params.remove(0),
+                let query_params = [
+                    c_params[1].clone(),
+                    c_params[2].clone(),
+                    c_params[3].clone(),
+                    c_params[4].clone(),
+                    c_params[5].clone(),
+                ];
+                let out = kdb::cache_query_fields_with_scope(
+                    sql.as_str(),
+                    INLINE_SQL_LOCAL_CACHE_SCOPE,
+                    &c_params,
+                    &query_params,
+                    cache,
                 );
-                let q_params: [SqlNamedParam; 5] = [
-                    SqlNamedParam(c_params[1].clone()),
-                    SqlNamedParam(c_params[2].clone()),
-                    SqlNamedParam(c_params[3].clone()),
-                    SqlNamedParam(c_params[4].clone()),
-                    SqlNamedParam(c_params[5].clone()),
-                ];
-                let q_p = &q_params.to_params();
-                let out = kdb::cache_query(self.oml_sql(), &c_params, q_p, cache);
                 debug_kdb!("[sql] got {} cols", out.len());
                 out
             }
@@ -170,7 +205,165 @@ impl FieldExtractor for SqlQuery {
             }
         }
     }
-    fn support_batch(&self) -> bool {
+    pub(crate) fn support_batch(&self) -> bool {
+        true
+    }
+}
+
+#[async_trait]
+impl AsyncFieldExtractor for SqlQuery {
+    async fn extract_one_async(
+        &self,
+        _target: &EvaluationTarget,
+        _src: &mut DataRecordRef<'_>,
+        _dst: &DataRecord,
+    ) -> Option<DataField> {
+        None
+    }
+
+    async fn extract_more_async(
+        &self,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
+        cache: &mut FieldQueryCache,
+    ) -> Vec<DataField> {
+        let (sql, md5, params) = collect_sql_params(self, src, dst);
+
+        match params.len() {
+            0 => {
+                let c_params: [DataField; 1] = [norm_query_field(&md5)];
+                let out = kdb::cache_query_fields_async_with_scope(
+                    sql.as_str(),
+                    INLINE_SQL_LOCAL_CACHE_SCOPE,
+                    &c_params,
+                    Vec::new,
+                    cache,
+                )
+                .await;
+                debug_kdb!("[sql] got {} cols", out.len());
+                out
+            }
+            1 => {
+                let c_params: [DataField; 2] =
+                    [norm_query_field(&md5), norm_query_field(&params[0])];
+                let out = kdb::cache_query_fields_async_with_scope(
+                    sql.as_str(),
+                    INLINE_SQL_LOCAL_CACHE_SCOPE,
+                    &c_params,
+                    || vec![c_params[1].clone()],
+                    cache,
+                )
+                .await;
+                debug_kdb!("[sql] got {} cols", out.len());
+                out
+            }
+            2 => {
+                let c_params: [DataField; 3] = [
+                    norm_query_field(&md5),
+                    norm_query_field(&params[1]),
+                    norm_query_field(&params[0]),
+                ];
+                let out = kdb::cache_query_fields_async_with_scope(
+                    sql.as_str(),
+                    INLINE_SQL_LOCAL_CACHE_SCOPE,
+                    &c_params,
+                    || vec![c_params[1].clone(), c_params[2].clone()],
+                    cache,
+                )
+                .await;
+                debug_kdb!("[sql] got {} cols", out.len());
+                out
+            }
+            3 => {
+                let c_params: [DataField; 4] = [
+                    norm_query_field(&md5),
+                    norm_query_field(&params[2]),
+                    norm_query_field(&params[1]),
+                    norm_query_field(&params[0]),
+                ];
+                let out = kdb::cache_query_fields_async_with_scope(
+                    sql.as_str(),
+                    INLINE_SQL_LOCAL_CACHE_SCOPE,
+                    &c_params,
+                    || {
+                        vec![
+                            c_params[1].clone(),
+                            c_params[2].clone(),
+                            c_params[3].clone(),
+                        ]
+                    },
+                    cache,
+                )
+                .await;
+                debug_kdb!("[sql] got {} cols", out.len());
+                out
+            }
+            4 => {
+                let c_params: [DataField; 5] = [
+                    norm_query_field(&md5),
+                    norm_query_field(&params[3]),
+                    norm_query_field(&params[2]),
+                    norm_query_field(&params[1]),
+                    norm_query_field(&params[0]),
+                ];
+                let out = kdb::cache_query_fields_async_with_scope(
+                    sql.as_str(),
+                    INLINE_SQL_LOCAL_CACHE_SCOPE,
+                    &c_params,
+                    || {
+                        vec![
+                            c_params[1].clone(),
+                            c_params[2].clone(),
+                            c_params[3].clone(),
+                            c_params[4].clone(),
+                        ]
+                    },
+                    cache,
+                )
+                .await;
+                debug_kdb!("[sql] got {} cols", out.len());
+                out
+            }
+            5 => {
+                let c_params: [DataField; 6] = [
+                    norm_query_field(&md5),
+                    norm_query_field(&params[4]),
+                    norm_query_field(&params[3]),
+                    norm_query_field(&params[2]),
+                    norm_query_field(&params[1]),
+                    norm_query_field(&params[0]),
+                ];
+                let out = kdb::cache_query_fields_async_with_scope(
+                    sql.as_str(),
+                    INLINE_SQL_LOCAL_CACHE_SCOPE,
+                    &c_params,
+                    || {
+                        vec![
+                            c_params[1].clone(),
+                            c_params[2].clone(),
+                            c_params[3].clone(),
+                            c_params[4].clone(),
+                            c_params[5].clone(),
+                        ]
+                    },
+                    cache,
+                )
+                .await;
+                debug_kdb!("[sql] got {} cols", out.len());
+                out
+            }
+            _ => {
+                error_edata!(
+                    dst.id,
+                    "not support more 9 params in sql eval: {}",
+                    params.len()
+                );
+                Vec::new()
+            }
+        }
+    }
+
+    fn support_batch_async(&self) -> bool {
         true
     }
 }
@@ -178,6 +371,7 @@ impl FieldExtractor for SqlQuery {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::AsyncFieldExtractor;
     use crate::core::DataRecordRef;
     use crate::language::CondAccessor;
     use once_cell::sync::OnceCell;
@@ -330,5 +524,26 @@ mod tests {
         );
 
         assert!(result.is_empty());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_single_param_query_async() {
+        ensure_provider();
+        let cache = &mut FieldQueryCache::default();
+
+        let param = DataField::from_digit("id".to_string(), 1);
+        let query = create_test_query("SELECT * FROM test WHERE id = :id", vec![("id", param)]);
+
+        let result = query
+            .extract_more_async(
+                &mut DataRecordRef::from(&DataRecord::default()),
+                &DataRecord::default(),
+                cache,
+            )
+            .await;
+
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].get_name(), "id");
+        assert_eq!(result[0].get_value(), &Value::Digit(1));
     }
 }

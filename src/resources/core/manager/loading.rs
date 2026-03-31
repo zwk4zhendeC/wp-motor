@@ -40,6 +40,7 @@ impl ResManager {
         for (path, _code) in oml_spc.items {
             if std::path::Path::new(path.as_str()).exists() && path.ends_with(".oml") {
                 let mdl = ObjModel::load(path.as_str())
+                    .await
                     .err_conv()
                     .want("load oml")
                     .with(path.as_str())?;

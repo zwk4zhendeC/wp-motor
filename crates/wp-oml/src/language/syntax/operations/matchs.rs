@@ -648,6 +648,10 @@ impl MatchOperation {
         }
     }
 
+    pub fn dat_crate_mut(&mut self) -> &mut MatchSource {
+        &mut self.dat_crate
+    }
+
     pub fn items_mut(&mut self) -> &mut Vec<MatchCase> {
         &mut self.items
     }

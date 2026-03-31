@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use crate::language::EvalExp;
 use derive_getters::Getters;
-use enum_dispatch::enum_dispatch;
 use wp_model_core::model::DataField;
 use wp_specs::WildArray;
 
@@ -14,6 +13,8 @@ pub struct ObjModel {
     rules: WildArray,
     enable: bool,
     pub items: Vec<EvalExp>,
+    #[getter(skip)]
+    pub(crate) static_items: Vec<EvalExp>,
     #[getter(skip)]
     has_temp_fields: bool,
     #[getter(skip)]
@@ -55,6 +56,7 @@ impl ObjModel {
             rules: WildArray::default(),
             enable: true,
             items: Vec::new(),
+            static_items: Vec::new(),
             has_temp_fields: false,
             static_fields: HashMap::new(),
         }
@@ -83,7 +85,6 @@ pub struct StubModel {
 }
 
 #[derive(Debug, Clone)]
-#[enum_dispatch(DataTransformer)]
 pub enum DataModel {
     Stub(StubModel),
     Object(ObjModel),

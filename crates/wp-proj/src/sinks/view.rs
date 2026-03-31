@@ -188,7 +188,7 @@ pub fn expand_route_rows(
     out
 }
 
-pub fn collect_oml_models(work_root: &str, dict: &EnvDict) -> RunResult<Vec<OmlRule>> {
+pub async fn collect_oml_models(work_root: &str, dict: &EnvDict) -> RunResult<Vec<OmlRule>> {
     let oml_root = ConfigPathResolver::resolve_model_path(work_root, "oml", dict)?;
     let root_str = oml_root
         .to_str()
@@ -201,6 +201,7 @@ pub fn collect_oml_models(work_root: &str, dict: &EnvDict) -> RunResult<Vec<OmlR
     for path in files {
         let path_str = path.to_string_lossy().to_string();
         let model = ObjModel::load(path_str.as_str())
+            .await
             .owe_rule()
             .with(path_str.as_str())
             .want("load oml model")?;

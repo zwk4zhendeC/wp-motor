@@ -1,6 +1,5 @@
 //mod lib;
-pub mod traits;
-pub use traits::*;
+pub(crate) mod traits;
 
 mod extract;
 mod functions;

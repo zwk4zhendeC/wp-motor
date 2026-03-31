@@ -1,4 +1,8 @@
 mod prelude;
+pub(crate) use syntax::evaluators::precise::{
+    data_field_extract_more, data_field_extract_one, data_field_support_batch, value_extract_more,
+    value_extract_one, value_extract_storage, value_support_batch,
+};
 pub use syntax::{
     NestedBinding,
     OmlKwGet,

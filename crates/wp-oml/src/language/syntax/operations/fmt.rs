@@ -22,4 +22,8 @@ impl FmtOperation {
     pub fn new(fmt_str: String, subs: Vec<RecordOperation>) -> Self {
         Self { fmt_str, subs }
     }
+
+    pub fn subs_mut(&mut self) -> &mut Vec<RecordOperation> {
+        &mut self.subs
+    }
 }

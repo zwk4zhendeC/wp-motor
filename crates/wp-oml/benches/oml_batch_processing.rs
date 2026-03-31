@@ -1,21 +1,21 @@
+mod support;
+
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
-use oml::core::DataTransformer;
 use oml::language::ObjModel;
-use oml::parser::oml_parse_raw;
+use support::{BenchTransformExt, parse_model};
 use wp_knowledge::cache::FieldQueryCache;
 use wp_model_core::model::{DataField, DataRecord};
 
 fn build_model(code: &str) -> ObjModel {
-    let mut code_ref = code;
-    oml_parse_raw(&mut code_ref).expect("parse OML model for batch bench")
+    parse_model(code)
 }
 
 fn create_test_records(count: usize) -> Vec<DataRecord> {
     (0..count)
         .map(|i| {
             DataRecord::from(vec![
-                DataField::from_chars("ts", &format!("2024-01-01T10:00:{:02}Z", i % 60)),
-                DataField::from_chars("msg", &format!("Request {} processed", i)),
+                DataField::from_chars("ts", format!("2024-01-01T10:00:{:02}Z", i % 60)),
+                DataField::from_chars("msg", format!("Request {} processed", i)),
                 DataField::from_chars("level", if i % 3 == 0 { "error" } else { "info" }),
             ])
         })

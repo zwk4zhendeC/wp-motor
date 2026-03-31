@@ -2,7 +2,7 @@
 ///
 /// This test ensures that static fields truly use zero-copy (Arc::clone only, no DataField::clone)
 /// by tracking FieldStorage variant usage in various static reference scenarios.
-use oml::core::DataTransformer;
+use oml::AsyncDataTransformer;
 use oml::parser::oml_parse_raw;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use wp_knowledge::cache::FieldQueryCache;
@@ -28,8 +28,8 @@ fn get_owned_count() -> usize {
     OWNED_COUNT.load(Ordering::SeqCst)
 }
 
-#[test]
-fn test_zero_copy_static_assignment() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_zero_copy_static_assignment() {
     // Static block with direct assignment
     let mut oml = r#"
 name : zero_copy_test_1
@@ -45,12 +45,12 @@ port : digit = PORT;
 enabled : bool = ENABLED;
 "#;
 
-    let model = oml_parse_raw(&mut oml).expect("parse OML");
+    let model = oml_parse_raw(&mut oml).await.expect("parse OML");
     let mut cache = FieldQueryCache::default();
     let input = DataRecord::default();
 
     reset_counters();
-    let result = model.transform(input, &mut cache);
+    let result = model.transform_async(input, &mut cache).await;
 
     // Verify static fields are present
     assert!(result.get_field_owned("host").is_some());
@@ -64,8 +64,8 @@ enabled : bool = ENABLED;
     println!("✓ Static assignment test passed");
 }
 
-#[test]
-fn test_zero_copy_static_in_match() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_zero_copy_static_in_match() {
     // Static block used in match branches
     let mut oml = r#"
 name : zero_copy_test_2
@@ -82,13 +82,13 @@ result : digit = match read(status) {
 };
 "#;
 
-    let model = oml_parse_raw(&mut oml).expect("parse OML");
+    let model = oml_parse_raw(&mut oml).await.expect("parse OML");
     let mut cache = FieldQueryCache::default();
 
     // Test success path
     let input = DataRecord::from(vec![DataField::from_digit("status", 200)]);
     reset_counters();
-    let result = model.transform(input, &mut cache);
+    let result = model.transform_async(input, &mut cache).await;
     assert_eq!(
         result.get_field_owned("result"),
         Some(DataField::from_digit("result", 200))
@@ -97,7 +97,7 @@ result : digit = match read(status) {
     // Test error path
     let input = DataRecord::from(vec![DataField::from_digit("status", 500)]);
     reset_counters();
-    let result = model.transform(input, &mut cache);
+    let result = model.transform_async(input, &mut cache).await;
     assert_eq!(
         result.get_field_owned("result"),
         Some(DataField::from_digit("result", 500))
@@ -106,8 +106,8 @@ result : digit = match read(status) {
     println!("✓ Static in match test passed");
 }
 
-#[test]
-fn test_zero_copy_static_in_object() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_zero_copy_static_in_object() {
     // Static block used in nested object
     let mut oml = r#"
 name : zero_copy_test_3
@@ -123,12 +123,12 @@ config = object {
 };
 "#;
 
-    let model = oml_parse_raw(&mut oml).expect("parse OML");
+    let model = oml_parse_raw(&mut oml).await.expect("parse OML");
     let mut cache = FieldQueryCache::default();
     let input = DataRecord::default();
 
     reset_counters();
-    let result = model.transform(input, &mut cache);
+    let result = model.transform_async(input, &mut cache).await;
 
     // Verify nested object contains static fields
     if let Some(config) = result.get_field_owned("config") {
@@ -141,10 +141,10 @@ config = object {
     println!("✓ Static in object test passed");
 }
 
-#[test]
-fn test_zero_copy_multi_stage_pipeline() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_zero_copy_multi_stage_pipeline() {
     // Multi-stage pipeline reusing same static symbols
-    let stage1 = r#"
+    let mut stage1 = r#"
 name : stage1
 ---
 static {
@@ -155,7 +155,7 @@ field_a : chars = CONSTANT_A;
 field_b : digit = CONSTANT_B;
 "#;
 
-    let stage2 = r#"
+    let mut stage2 = r#"
 name : stage2
 ---
 static {
@@ -167,8 +167,8 @@ field_b : digit = CONSTANT_B;
 field_c : chars = read(field_a);
 "#;
 
-    let model1 = oml_parse_raw(&mut stage1.as_ref()).expect("parse stage1");
-    let model2 = oml_parse_raw(&mut stage2.as_ref()).expect("parse stage2");
+    let model1 = oml_parse_raw(&mut stage1).await.expect("parse stage1");
+    let model2 = oml_parse_raw(&mut stage2).await.expect("parse stage2");
 
     let mut cache = FieldQueryCache::default();
     let input = DataRecord::default();
@@ -176,8 +176,8 @@ field_c : chars = read(field_a);
     reset_counters();
 
     // Process through 2-stage pipeline
-    let result1 = model1.transform(input, &mut cache);
-    let result2 = model2.transform(result1, &mut cache);
+    let result1 = model1.transform_async(input, &mut cache).await;
+    let result2 = model2.transform_async(result1, &mut cache).await;
 
     // Verify fields exist
     assert!(result2.get_field_owned("field_a").is_some());
@@ -193,8 +193,8 @@ field_c : chars = read(field_a);
     println!("✓ Multi-stage pipeline test passed");
 }
 
-#[test]
-fn test_zero_copy_comprehensive() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_zero_copy_comprehensive() {
     // Comprehensive test with all static reference forms
     let mut oml = r#"
 name : zero_copy_comprehensive
@@ -226,7 +226,7 @@ is_enabled : bool = match read(status) {
 };
 "#;
 
-    let model = oml_parse_raw(&mut oml).expect("parse OML");
+    let model = oml_parse_raw(&mut oml).await.expect("parse OML");
     let mut cache = FieldQueryCache::default();
 
     // Test case 1: Normal execution
@@ -236,7 +236,7 @@ is_enabled : bool = match read(status) {
     ]);
 
     reset_counters();
-    let result = model.transform(input, &mut cache);
+    let result = model.transform_async(input, &mut cache).await;
 
     // Verify all expected fields
     assert!(result.get_field_owned("server_host").is_some());
@@ -253,9 +253,9 @@ is_enabled : bool = match read(status) {
     println!("✓ Comprehensive zero-copy test passed");
 }
 
-#[test]
+#[tokio::test(flavor = "current_thread")]
 #[should_panic]
-fn test_unresolved_static_symbol_panics() {
+async fn test_unresolved_static_symbol_panics() {
     // This test ensures unresolved static symbols are caught
     let mut oml = r#"
 name : invalid
@@ -264,17 +264,17 @@ field : chars = UNDEFINED_SYMBOL;
 "#;
 
     // This should fail during parse or rewrite phase
-    let model = oml_parse_raw(&mut oml).expect("parse OML");
+    let model = oml_parse_raw(&mut oml).await.expect("parse OML");
     let mut cache = FieldQueryCache::default();
     let input = DataRecord::default();
 
     // If parsing succeeds (shouldn't), execution should panic
-    let _result = model.transform(input, &mut cache);
+    let _result = model.transform_async(input, &mut cache).await;
 }
 
 // Performance regression test
-#[test]
-fn test_zero_copy_performance_characteristics() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_zero_copy_performance_characteristics() {
     let mut static_oml = r#"
 name : perf_test_static
 ---
@@ -299,20 +299,24 @@ f3 : chars = chars("value3");
 f4 : chars = chars("value4");
 "#;
 
-    let model_static = oml_parse_raw(&mut static_oml).expect("parse static");
-    let model_temp = oml_parse_raw(&mut temp_oml).expect("parse temp");
+    let model_static = oml_parse_raw(&mut static_oml).await.expect("parse static");
+    let model_temp = oml_parse_raw(&mut temp_oml).await.expect("parse temp");
 
     let mut cache = FieldQueryCache::default();
     let input = DataRecord::default();
 
     // Warm up
-    let _ = model_static.transform(input.clone(), &mut cache);
-    let _ = model_temp.transform(input.clone(), &mut cache);
+    let _ = model_static
+        .transform_async(input.clone(), &mut cache)
+        .await;
+    let _ = model_temp.transform_async(input.clone(), &mut cache).await;
 
     // Static version should be at least as fast as temp version
     // (In reality, static should be faster due to Arc sharing)
-    let static_result = model_static.transform(input.clone(), &mut cache);
-    let temp_result = model_temp.transform(input.clone(), &mut cache);
+    let static_result = model_static
+        .transform_async(input.clone(), &mut cache)
+        .await;
+    let temp_result = model_temp.transform_async(input.clone(), &mut cache).await;
 
     // Verify both produce same logical results
     assert_eq!(static_result.items.len(), temp_result.items.len());

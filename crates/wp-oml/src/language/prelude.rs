@@ -1,4 +1,4 @@
-pub use crate::core::{DataRecordRef, FieldExtractor};
+pub use crate::core::DataRecordRef;
 pub use crate::language::EvaluationTarget;
 pub use crate::language::GenericAccessor;
 pub use crate::language::syntax::accessors::DirectAccessor;
@@ -8,4 +8,5 @@ pub use derive_getters::Getters;
 pub use parse_display::Display;
 pub use std::fmt::{Display, Formatter};
 pub use wp_data_fmt::ValueFormatter;
+#[allow(unused_imports)]
 pub use wp_model_core::model::{DataField, DataRecord, DataType, Value};

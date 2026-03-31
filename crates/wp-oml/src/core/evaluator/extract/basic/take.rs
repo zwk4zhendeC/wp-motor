@@ -1,12 +1,14 @@
-use crate::core::FieldExtractor;
+use crate::core::AsyncFieldExtractor;
 use crate::core::prelude::*;
 use crate::language::EvaluationTarget;
 use crate::language::FieldTake;
+use async_trait::async_trait;
 use wildmatch::WildMatch;
 use wp_model_core::model::{DataField, DataRecord, FieldStorage};
 
-impl FieldExtractor for FieldTake {
-    fn extract_one(
+#[allow(dead_code)]
+impl FieldTake {
+    pub(crate) fn extract_one(
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
@@ -28,7 +30,7 @@ impl FieldExtractor for FieldTake {
         None
     }
 
-    fn extract_storage(
+    pub(crate) fn extract_storage(
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
@@ -36,6 +38,49 @@ impl FieldExtractor for FieldTake {
     ) -> Option<FieldStorage> {
         self.extract_one(target, src, dst)
             .map(FieldStorage::from_owned)
+    }
+
+    pub(crate) fn extract_more(
+        &self,
+        _src: &mut DataRecordRef<'_>,
+        _dst: &DataRecord,
+        _cache: &mut FieldQueryCache,
+    ) -> Vec<DataField> {
+        Vec::new()
+    }
+
+    pub(crate) fn support_batch(&self) -> bool {
+        false
+    }
+}
+
+#[async_trait]
+impl AsyncFieldExtractor for FieldTake {
+    async fn extract_one_async(
+        &self,
+        target: &EvaluationTarget,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
+    ) -> Option<DataField> {
+        self.extract_one(target, src, dst)
+    }
+
+    async fn extract_storage_async(
+        &self,
+        target: &EvaluationTarget,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
+    ) -> Option<FieldStorage> {
+        self.extract_storage(target, src, dst)
+    }
+
+    async fn extract_more_async(
+        &self,
+        _src: &mut DataRecordRef<'_>,
+        _dst: &DataRecord,
+        _cache: &mut FieldQueryCache,
+    ) -> Vec<DataField> {
+        Vec::new()
     }
 }
 

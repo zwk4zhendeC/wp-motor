@@ -1,5 +1,7 @@
+use crate::core::AsyncFieldExtractor;
 use crate::core::prelude::*;
 use crate::{core::FieldCollector, language::DirectAccessor};
+use async_trait::async_trait;
 use wp_model_core::model::FieldStorage;
 mod batch;
 mod read;
@@ -19,8 +21,9 @@ impl FieldCollector for DirectAccessor {
     }
 }
 
-impl FieldExtractor for DirectAccessor {
-    fn extract_one(
+#[allow(dead_code)]
+impl DirectAccessor {
+    pub(crate) fn extract_one(
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
@@ -32,7 +35,7 @@ impl FieldExtractor for DirectAccessor {
         }
     }
 
-    fn extract_storage(
+    pub(crate) fn extract_storage(
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
@@ -42,7 +45,7 @@ impl FieldExtractor for DirectAccessor {
             .map(FieldStorage::from_owned)
     }
 
-    fn extract_more(
+    pub(crate) fn extract_more(
         &self,
         src: &mut DataRecordRef<'_>,
         dst: &DataRecord,
@@ -54,10 +57,56 @@ impl FieldExtractor for DirectAccessor {
         }
     }
 
-    fn support_batch(&self) -> bool {
+    pub(crate) fn support_batch(&self) -> bool {
         match self {
             DirectAccessor::Take(o) => o.support_batch(),
             DirectAccessor::Read(o) => o.support_batch(),
+        }
+    }
+}
+
+#[async_trait]
+impl AsyncFieldExtractor for DirectAccessor {
+    async fn extract_one_async(
+        &self,
+        target: &EvaluationTarget,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
+    ) -> Option<DataField> {
+        match self {
+            DirectAccessor::Take(o) => o.extract_one_async(target, src, dst).await,
+            DirectAccessor::Read(o) => o.extract_one_async(target, src, dst).await,
+        }
+    }
+
+    async fn extract_storage_async(
+        &self,
+        target: &EvaluationTarget,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
+    ) -> Option<FieldStorage> {
+        match self {
+            DirectAccessor::Take(o) => o.extract_storage_async(target, src, dst).await,
+            DirectAccessor::Read(o) => o.extract_storage_async(target, src, dst).await,
+        }
+    }
+
+    async fn extract_more_async(
+        &self,
+        src: &mut DataRecordRef<'_>,
+        dst: &DataRecord,
+        cache: &mut FieldQueryCache,
+    ) -> Vec<DataField> {
+        match self {
+            DirectAccessor::Take(o) => o.extract_more_async(src, dst, cache).await,
+            DirectAccessor::Read(o) => o.extract_more_async(src, dst, cache).await,
+        }
+    }
+
+    fn support_batch_async(&self) -> bool {
+        match self {
+            DirectAccessor::Take(o) => o.support_batch_async(),
+            DirectAccessor::Read(o) => o.support_batch_async(),
         }
     }
 }

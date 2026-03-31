@@ -1,15 +1,15 @@
+mod support;
+
 use criterion::{Criterion, criterion_group, criterion_main};
-use oml::core::DataTransformer;
 use oml::language::ObjModel;
-use oml::parser::oml_parse_raw;
 use orion_variate::EnvDict;
 use std::fs;
 use std::hint::black_box;
 use std::path::PathBuf;
+use support::BenchTransformExt;
 use wp_knowledge::cache::FieldQueryCache;
 use wp_knowledge::facade as kdb;
 use wp_model_core::model::{DataField, DataRecord, FieldStorage};
-use wp_primitives::Parser;
 
 const BENCH_KEYS: [&str; 10] = [
     "linghuchong",
@@ -84,10 +84,7 @@ enabled = true
 }
 
 fn build_model(code: &str) -> ObjModel {
-    let conf = code.to_string();
-    oml_parse_raw
-        .parse_next(&mut conf.as_str())
-        .expect("parse OML model for bench")
+    support::parse_model(code)
 }
 
 fn bench_threadclone_sql(c: &mut Criterion) {

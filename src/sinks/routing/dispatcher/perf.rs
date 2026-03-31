@@ -26,6 +26,7 @@ const NGINX_SAMPLE: &str = include_str!("../../../../tests/sample/nginx/sample.d
 
 /// Nginx 数据集批量性能场景：构造批量记录、SinkDispatcher 与 OML 资源，供 Criterion 基准复用。
 pub struct OmlBatchPerfCase {
+    runtime: tokio::runtime::Runtime,
     dispatcher: SinkDispatcher,
     infra: InfraSinkAgent,
     cache: FieldQueryCache,
@@ -69,7 +70,12 @@ impl OmlBatchPerfCase {
         let template = parse_nginx_template(NGINX_SAMPLE.trim());
         let records = build_records(batch_size, &template);
         let dispatcher = build_dispatcher();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("build tokio runtime for oml batch perf case");
         Self {
+            runtime,
             dispatcher,
             infra: InfraSinkAgent::use_null(),
             cache: FieldQueryCache::default(),
@@ -92,13 +98,15 @@ impl OmlBatchPerfCase {
             .collect()
     }
 
-    /// 执行一次 `oml_proc_batch` 并返回 fanout 后的记录数量汇总。
+    /// 执行一次 `oml_proc_batch_async` 并返回 fanout 后的记录数量汇总。
     pub fn run_once(&mut self) -> usize {
         let batch = self.prepare_batch();
-        let per_sink = self
-            .dispatcher
-            .oml_proc_batch(batch, &self.infra, &mut self.cache, &self.rule)
-            .expect("oml_proc_batch perf case failed");
+        let per_sink = self.runtime.block_on(async {
+            self.dispatcher
+                .oml_proc_batch_async(batch, &self.infra, &mut self.cache, &self.rule)
+                .await
+                .expect("oml_proc_batch_async perf case failed")
+        });
         per_sink.iter().map(|units| units.len()).sum()
     }
 }
@@ -252,7 +260,13 @@ match_chars = match read(option:[wp_src_ip]) {
 };
 * : auto = read();
 "#;
-    let model = oml_parse_raw(&mut code).expect("parse nginx perf oml");
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("build tokio runtime for dispatcher perf model parsing");
+    let model = runtime
+        .block_on(oml_parse_raw(&mut code))
+        .expect("parse nginx perf oml");
     DataModel::Object(model)
 }
 

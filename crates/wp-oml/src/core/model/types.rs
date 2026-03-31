@@ -1,37 +1,66 @@
-use super::super::DataTransformer;
+use super::super::AsyncDataTransformer;
 use crate::core::prelude::*;
 use crate::language::{DataModel, StubModel};
+use async_trait::async_trait;
 
-impl DataTransformer for StubModel {
-    fn transform(&self, data: DataRecord, _cache: &mut FieldQueryCache) -> DataRecord {
+#[async_trait]
+impl AsyncDataTransformer for StubModel {
+    async fn transform_async(&self, data: DataRecord, _cache: &mut FieldQueryCache) -> DataRecord {
         data
     }
 
-    fn transform_ref(&self, data: &DataRecord, _cache: &mut FieldQueryCache) -> DataRecord {
+    async fn transform_ref_async(
+        &self,
+        data: &DataRecord,
+        _cache: &mut FieldQueryCache,
+    ) -> DataRecord {
         data.clone()
     }
-
-    fn append(&self, _data: &mut DataRecord) {}
 }
-impl DataTransformer for DataModel {
-    fn transform(&self, data: DataRecord, cache: &mut FieldQueryCache) -> DataRecord {
+
+#[async_trait]
+impl AsyncDataTransformer for DataModel {
+    async fn transform_async(&self, data: DataRecord, cache: &mut FieldQueryCache) -> DataRecord {
         match self {
-            DataModel::Stub(null_model) => null_model.transform(data, cache),
-            DataModel::Object(obj_model) => obj_model.transform(data, cache),
+            DataModel::Stub(null_model) => null_model.transform_async(data, cache).await,
+            DataModel::Object(obj_model) => obj_model.transform_async(data, cache).await,
         }
     }
 
-    fn transform_ref(&self, data: &DataRecord, cache: &mut FieldQueryCache) -> DataRecord {
+    async fn transform_ref_async(
+        &self,
+        data: &DataRecord,
+        cache: &mut FieldQueryCache,
+    ) -> DataRecord {
         match self {
-            DataModel::Stub(null_model) => null_model.transform_ref(data, cache),
-            DataModel::Object(obj_model) => obj_model.transform_ref(data, cache),
+            DataModel::Stub(null_model) => null_model.transform_ref_async(data, cache).await,
+            DataModel::Object(obj_model) => obj_model.transform_ref_async(data, cache).await,
         }
     }
 
-    fn append(&self, data: &mut DataRecord) {
+    async fn transform_batch_async(
+        &self,
+        records: Vec<DataRecord>,
+        cache: &mut FieldQueryCache,
+    ) -> Vec<DataRecord> {
         match self {
-            DataModel::Stub(null_model) => null_model.append(data),
-            DataModel::Object(obj_model) => obj_model.append(data),
+            DataModel::Stub(null_model) => null_model.transform_batch_async(records, cache).await,
+            DataModel::Object(obj_model) => obj_model.transform_batch_async(records, cache).await,
+        }
+    }
+
+    async fn transform_batch_ref_async(
+        &self,
+        records: &[DataRecord],
+        cache: &mut FieldQueryCache,
+    ) -> Vec<DataRecord> {
+        match self {
+            DataModel::Stub(null_model) => {
+                null_model.transform_batch_ref_async(records, cache).await
+            }
+            DataModel::Object(obj_model) => {
+                obj_model.transform_batch_ref_async(records, cache).await
+            }
         }
     }
 }

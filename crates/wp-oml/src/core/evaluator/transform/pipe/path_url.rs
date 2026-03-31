@@ -58,13 +58,13 @@ impl ValueProcessor for UrlGet {
 }
 #[cfg(test)]
 mod tests {
-    use crate::core::DataTransformer;
+    use crate::core::AsyncDataTransformer;
     use crate::parser::oml_parse_raw;
     use wp_knowledge::cache::FieldQueryCache;
     use wp_model_core::model::{DataField, DataRecord, FieldStorage};
 
-    #[test]
-    fn test_pipe_path_get() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_pipe_path_get() {
         let cache = &mut FieldQueryCache::default();
         let data = vec![FieldStorage::from_owned(DataField::from_chars(
             "A1",
@@ -77,9 +77,9 @@ mod tests {
         ---
         X : chars =  pipe take(A1) | path(name);
          "#;
-        let model = oml_parse_raw(&mut conf).unwrap();
+        let model = oml_parse_raw(&mut conf).await.unwrap();
 
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
 
         let expect = DataField::from_chars(
             "X".to_string(),
@@ -88,8 +88,8 @@ mod tests {
         assert_eq!(target.field("X").map(|s| s.as_field()), Some(&expect));
     }
 
-    #[test]
-    fn test_pipe_url_get() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_pipe_url_get() {
         let cache = &mut FieldQueryCache::default();
         let data = vec![FieldStorage::from_owned(DataField::from_chars(
             "A1",
@@ -106,9 +106,9 @@ mod tests {
         D : chars =  pipe read(A1) | url(path);
         E : chars =  pipe read(A1) | url(params);
          "#;
-        let model = oml_parse_raw(&mut conf).unwrap();
+        let model = oml_parse_raw(&mut conf).await.unwrap();
 
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
 
         let expect = DataField::from_chars("A".to_string(), "a.b.com".to_string());
         assert_eq!(target.field("A").map(|s| s.as_field()), Some(&expect));

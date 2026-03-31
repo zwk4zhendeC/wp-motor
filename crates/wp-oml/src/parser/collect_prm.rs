@@ -26,7 +26,7 @@ pub fn oml_collect(data: &mut &str) -> WResult<ArrOperation> {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::DataTransformer;
+    use crate::core::AsyncDataTransformer;
     use crate::parser::collect_prm::oml_aga_collect;
     use crate::parser::oml_parse_raw;
     use orion_error::TestAssert;
@@ -34,16 +34,16 @@ mod tests {
     use wp_model_core::model::{DataField, DataRecord, FieldStorage};
     use wp_primitives::WResult as ModalResult;
 
-    #[test]
-    fn test_oml_collect() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_oml_collect() -> ModalResult<()> {
         let mut code = r#" collect take( keys: [a,b,c*]) "#;
         let expect = r#" collect take( in: [a,b,c*]) "#;
         crate::parser::utils::for_test::assert_oml_parse_ext(&mut code, oml_aga_collect, expect);
         Ok(())
     }
 
-    #[test]
-    fn test_collect_array() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_collect_array() {
         let cache = &mut FieldQueryCache::default();
 
         let data = vec![
@@ -59,8 +59,8 @@ mod tests {
         dport:digit = read(dport);
         port_list = collect read(keys:[sport,dport]);
          "#;
-        let model = oml_parse_raw(&mut conf).assert();
-        let target = model.transform(src, cache);
+        let model = oml_parse_raw(&mut conf).await.assert();
+        let target = model.transform_async(src, cache).await;
 
         let expect = DataField::from_arr(
             "port_list".to_string(),

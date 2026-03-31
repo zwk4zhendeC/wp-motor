@@ -326,6 +326,7 @@ pub fn oml_aga_match(data: &mut &str) -> WResult<PreciseEvaluator> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::AsyncDataTransformer;
     use orion_error::TestAssert;
     use wp_model_core::model::{DataField, FieldStorage};
 
@@ -336,8 +337,8 @@ mod tests {
     use crate::parser::utils::for_test::assert_oml_parse;
     use crate::types::AnyResult;
 
-    #[test]
-    fn test_match_item() -> AnyResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_item() -> AnyResult<()> {
         let mut code = r#"chars(3) => chars(高危(漏洞));"#;
         let x = match_cond1_item(&mut code).assert();
         println!("{:?}", x);
@@ -371,8 +372,8 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_match_err() -> AnyResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_err() -> AnyResult<()> {
         let mut code = r#"chas(A) => chars(5),"#;
         disp_err(code, match_cond1_item(&mut code));
         let mut code = r#"chars(A) > chars(5),"#;
@@ -389,16 +390,16 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_match() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match() {
         let mut code = r#" match read(city)  {
         chars(A) => chars(bj),
         } "#;
         assert_oml_parse(&mut code, oml_aga_match);
     }
 
-    #[test]
-    fn test_match_2() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_2() {
         let mut code = r#" match read(city)   {
         chars(A) => chars(bj),
         chars(B) => chars(cs),
@@ -408,8 +409,8 @@ mod tests {
         assert_oml_parse(&mut code, oml_aga_match);
     }
 
-    #[test]
-    fn test_match_3() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_3() {
         let mut code = r#" match read(city)  {
         in (ip(127.0.0.1),   ip(127.0.0.100)) => chars(bj),
         in (ip(127.0.0.100), ip(127.0.0.200)) => chars(bj),
@@ -420,8 +421,8 @@ mod tests {
         assert_oml_parse(&mut code, oml_aga_match);
     }
 
-    #[test]
-    fn test_match_4() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_4() {
         let mut code = r#" match ( read(city1), read(city2) ) {
         (ip(127.0.0.1),   ip(127.0.0.100)) => chars(bj),
         (ip(127.0.0.100), ip(127.0.0.200)) => chars(bj),
@@ -432,8 +433,8 @@ mod tests {
         assert_oml_parse(&mut code, oml_aga_match);
     }
 
-    #[test]
-    fn test_match_with_function() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_with_function() {
         // Test function-based matching with starts_with
         let mut code = r#" match read(Content) {
         starts_with('jk2_init()') => chars(E1),
@@ -444,8 +445,8 @@ mod tests {
         assert_oml_parse(&mut code, oml_aga_match);
     }
 
-    #[test]
-    fn test_match_with_ends_with() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_with_ends_with() {
         // Test ends_with function
         let mut code = r#" match read(filename) {
         ends_with('.log') => chars(log_file),
@@ -457,8 +458,8 @@ mod tests {
         assert_oml_parse(&mut code, oml_aga_match);
     }
 
-    #[test]
-    fn test_match_with_contains() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_with_contains() {
         // Test contains function
         let mut code = r#" match read(message) {
         contains('error') => chars(error_msg),
@@ -470,8 +471,8 @@ mod tests {
         assert_oml_parse(&mut code, oml_aga_match);
     }
 
-    #[test]
-    fn test_match_mixed_functions() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_mixed_functions() {
         // Test mixing different functions
         let mut code = r#" match read(log_line) {
         starts_with('[ERROR]') => chars(error),
@@ -484,20 +485,20 @@ mod tests {
         assert_oml_parse(&mut code, oml_aga_match);
     }
 
-    #[test]
-    fn test_oml_parse_basic() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_oml_parse_basic() {
         use crate::parser::oml_parse_raw;
 
         let mut conf = r#"name : test
 ---
 A = read(field);
 "#;
-        let result = oml_parse_raw(&mut conf);
+        let result = oml_parse_raw(&mut conf).await;
         assert!(result.is_ok(), "Basic OML parse should succeed");
     }
 
-    #[test]
-    fn test_oml_parse_with_simple_match() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_oml_parse_with_simple_match() {
         use crate::parser::oml_parse_raw;
 
         let mut conf = r#"name : test
@@ -507,7 +508,7 @@ A = match read(field) {
     _ => chars(C),
 };
 "#;
-        let result = oml_parse_raw(&mut conf);
+        let result = oml_parse_raw(&mut conf).await;
         assert!(
             result.is_ok(),
             "Match OML parse should succeed: {:?}",
@@ -515,8 +516,8 @@ A = match read(field) {
         );
     }
 
-    #[test]
-    fn test_oml_parse_with_function_match() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_oml_parse_with_function_match() {
         use crate::parser::oml_parse_raw;
 
         let mut conf = r#"name : test
@@ -526,7 +527,7 @@ A = match read(field) {
     _ => chars(fail),
 };
 "#;
-        let result = oml_parse_raw(&mut conf);
+        let result = oml_parse_raw(&mut conf).await;
         assert!(
             result.is_ok(),
             "Function match parse should succeed: {:?}",
@@ -534,9 +535,8 @@ A = match read(field) {
         );
     }
 
-    #[test]
-    fn test_match_function_execution() {
-        use crate::core::DataTransformer;
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_function_execution() {
         use crate::parser::oml_parse_raw;
         use wp_knowledge::cache::FieldQueryCache;
         use wp_model_core::model::{DataField, DataRecord};
@@ -556,8 +556,10 @@ EventType = match read(Content) {
     _ => chars(other),
 };
 "#;
-        let model = oml_parse_raw(&mut conf).expect("Failed to parse starts_with");
-        let target = model.transform(src, cache);
+        let model = oml_parse_raw(&mut conf)
+            .await
+            .expect("Failed to parse starts_with");
+        let target = model.transform_async(src, cache).await;
         let expect = DataField::from_chars("EventType".to_string(), "error".to_string());
         assert_eq!(
             target.field("EventType").map(|s| s.as_field()),
@@ -572,14 +574,16 @@ FileType = match read(filename) {
     _ => chars(other),
 };
 "#;
-        let model2 = oml_parse_raw(&mut conf2).expect("Failed to parse ends_with");
+        let model2 = oml_parse_raw(&mut conf2)
+            .await
+            .expect("Failed to parse ends_with");
         let cache2 = &mut FieldQueryCache::default();
         let data2 = vec![FieldStorage::from_owned(DataField::from_chars(
             "filename",
             "config.json",
         ))];
         let src2 = DataRecord::from(data2);
-        let target2 = model2.transform(src2, cache2);
+        let target2 = model2.transform_async(src2, cache2).await;
         let expect2 = DataField::from_chars("FileType".to_string(), "json".to_string());
         assert_eq!(
             target2.field("FileType").map(|s| s.as_field()),
@@ -594,14 +598,16 @@ ErrorType = match read(message) {
     _ => chars(other),
 };
 "#;
-        let model3 = oml_parse_raw(&mut conf3).expect("Failed to parse contains");
+        let model3 = oml_parse_raw(&mut conf3)
+            .await
+            .expect("Failed to parse contains");
         let cache3 = &mut FieldQueryCache::default();
         let data3 = vec![FieldStorage::from_owned(DataField::from_chars(
             "message",
             "Connection timeout occurred",
         ))];
         let src3 = DataRecord::from(data3);
-        let target3 = model3.transform(src3, cache3);
+        let target3 = model3.transform_async(src3, cache3).await;
         let expect3 = DataField::from_chars("ErrorType".to_string(), "timeout".to_string());
         assert_eq!(
             target3.field("ErrorType").map(|s| s.as_field()),
@@ -616,14 +622,16 @@ LogLevel = match read(log_line) {
     _ => chars(other),
 };
 "#;
-        let model4 = oml_parse_raw(&mut conf4).expect("Failed to parse regex_match");
+        let model4 = oml_parse_raw(&mut conf4)
+            .await
+            .expect("Failed to parse regex_match");
         let cache4 = &mut FieldQueryCache::default();
         let data4 = vec![FieldStorage::from_owned(DataField::from_chars(
             "log_line",
             "[ERROR] Failed",
         ))];
         let src4 = DataRecord::from(data4);
-        let target4 = model4.transform(src4, cache4);
+        let target4 = model4.transform_async(src4, cache4).await;
         let expect4 = DataField::from_chars("LogLevel".to_string(), "error".to_string());
         assert_eq!(
             target4.field("LogLevel").map(|s| s.as_field()),
@@ -638,11 +646,13 @@ Status = match read(field) {
     _ => chars(not_empty),
 };
 "#;
-        let model5 = oml_parse_raw(&mut conf5).expect("Failed to parse is_empty");
+        let model5 = oml_parse_raw(&mut conf5)
+            .await
+            .expect("Failed to parse is_empty");
         let cache5 = &mut FieldQueryCache::default();
         let data5 = vec![FieldStorage::from_owned(DataField::from_chars("field", ""))];
         let src5 = DataRecord::from(data5);
-        let target5 = model5.transform(src5, cache5);
+        let target5 = model5.transform_async(src5, cache5).await;
         let expect5 = DataField::from_chars("Status".to_string(), "empty".to_string());
         assert_eq!(
             target5.field("Status").map(|s| s.as_field()),
@@ -660,13 +670,13 @@ Level = match read(count) {
     _ => chars(low),
 };
 "#;
-        let model6 = oml_parse_raw(&mut conf6).expect("Failed to parse gt");
+        let model6 = oml_parse_raw(&mut conf6).await.expect("Failed to parse gt");
         let cache6 = &mut FieldQueryCache::default();
         let data6 = vec![FieldStorage::from_owned(DataField::from_digit(
             "count", 150,
         ))];
         let src6 = DataRecord::from(data6);
-        let target6 = model6.transform(src6, cache6);
+        let target6 = model6.transform_async(src6, cache6).await;
         let expect6 = DataField::from_chars("Level".to_string(), "high".to_string());
         assert_eq!(target6.field("Level").map(|s| s.as_field()), Some(&expect6));
 
@@ -678,11 +688,11 @@ Grade = match read(score) {
     _ => chars(pass),
 };
 "#;
-        let model7 = oml_parse_raw(&mut conf7).expect("Failed to parse lt");
+        let model7 = oml_parse_raw(&mut conf7).await.expect("Failed to parse lt");
         let cache7 = &mut FieldQueryCache::default();
         let data7 = vec![FieldStorage::from_owned(DataField::from_digit("score", 45))];
         let src7 = DataRecord::from(data7);
-        let target7 = model7.transform(src7, cache7);
+        let target7 = model7.transform_async(src7, cache7).await;
         let expect7 = DataField::from_chars("Grade".to_string(), "fail".to_string());
         assert_eq!(target7.field("Grade").map(|s| s.as_field()), Some(&expect7));
 
@@ -694,11 +704,11 @@ Status = match read(level) {
     _ => chars(normal),
 };
 "#;
-        let model8 = oml_parse_raw(&mut conf8).expect("Failed to parse eq");
+        let model8 = oml_parse_raw(&mut conf8).await.expect("Failed to parse eq");
         let cache8 = &mut FieldQueryCache::default();
         let data8 = vec![FieldStorage::from_owned(DataField::from_digit("level", 5))];
         let src8 = DataRecord::from(data8);
-        let target8 = model8.transform(src8, cache8);
+        let target8 = model8.transform_async(src8, cache8).await;
         let expect8 = DataField::from_chars("Status".to_string(), "max".to_string());
         assert_eq!(
             target8.field("Status").map(|s| s.as_field()),
@@ -713,14 +723,16 @@ TempZone = match read(temperature) {
     _ => chars(other),
 };
 "#;
-        let model9 = oml_parse_raw(&mut conf9).expect("Failed to parse in_range");
+        let model9 = oml_parse_raw(&mut conf9)
+            .await
+            .expect("Failed to parse in_range");
         let cache9 = &mut FieldQueryCache::default();
         let data9 = vec![FieldStorage::from_owned(DataField::from_digit(
             "temperature",
             25,
         ))];
         let src9 = DataRecord::from(data9);
-        let target9 = model9.transform(src9, cache9);
+        let target9 = model9.transform_async(src9, cache9).await;
         let expect9 = DataField::from_chars("TempZone".to_string(), "comfortable".to_string());
         assert_eq!(
             target9.field("TempZone").map(|s| s.as_field()),
@@ -735,13 +747,15 @@ Result = match read(status) {
     _ => chars(other),
 };
 "#;
-        let model10 = oml_parse_raw(&mut conf10).expect("Failed to parse iequals");
+        let model10 = oml_parse_raw(&mut conf10)
+            .await
+            .expect("Failed to parse iequals");
         let cache10 = &mut FieldQueryCache::default();
         let data10 = vec![FieldStorage::from_owned(DataField::from_chars(
             "status", "SUCCESS",
         ))];
         let src10 = DataRecord::from(data10);
-        let target10 = model10.transform(src10, cache10);
+        let target10 = model10.transform_async(src10, cache10).await;
         let expect10 = DataField::from_chars("Result".to_string(), "ok".to_string());
         assert_eq!(
             target10.field("Result").map(|s| s.as_field()),
@@ -756,13 +770,15 @@ Result = match read(status) {
     _ => chars(other),
 };
 "#;
-        let model11 = oml_parse_raw(&mut conf11).expect("Failed to parse iequals_any");
+        let model11 = oml_parse_raw(&mut conf11)
+            .await
+            .expect("Failed to parse iequals_any");
         let cache11 = &mut FieldQueryCache::default();
         let data11 = vec![FieldStorage::from_owned(DataField::from_chars(
             "status", "DONE",
         ))];
         let src11 = DataRecord::from(data11);
-        let target11 = model11.transform(src11, cache11);
+        let target11 = model11.transform_async(src11, cache11).await;
         let expect11 = DataField::from_chars("Result".to_string(), "ok".to_string());
         assert_eq!(
             target11.field("Result").map(|s| s.as_field()),
@@ -770,9 +786,8 @@ Result = match read(status) {
         );
     }
 
-    #[test]
-    fn test_match_with_quoted_strings() {
-        use crate::core::DataTransformer;
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_with_quoted_strings() {
         use orion_error::TestAssert;
         use wp_knowledge::cache::FieldQueryCache;
         use wp_model_core::model::DataRecord;
@@ -787,7 +802,9 @@ Result = match read(status) {
     _ => chars('default message'),
 };
 "#;
-        let model = crate::parser::oml_conf::oml_parse_raw(&mut code).assert();
+        let model = crate::parser::oml_conf::oml_parse_raw(&mut code)
+            .await
+            .assert();
         assert_eq!(model.name(), "test");
 
         // Test execution: verify that quoted strings are parsed correctly
@@ -798,7 +815,7 @@ Result = match read(status) {
             "status", "A",
         ))];
         let src1 = DataRecord::from(data1);
-        let target1 = model.transform(src1, cache);
+        let target1 = model.transform_async(src1, cache).await;
         let expect1 = DataField::from_chars("Result".to_string(), "success message".to_string());
         assert_eq!(
             target1.field("Result").map(|s| s.as_field()),
@@ -810,7 +827,7 @@ Result = match read(status) {
             "status", "B",
         ))];
         let src2 = DataRecord::from(data2);
-        let target2 = model.transform(src2, cache);
+        let target2 = model.transform_async(src2, cache).await;
         let expect2 = DataField::from_chars("Result".to_string(), "failure message".to_string());
         assert_eq!(
             target2.field("Result").map(|s| s.as_field()),
@@ -822,7 +839,7 @@ Result = match read(status) {
             "status", "C",
         ))];
         let src3 = DataRecord::from(data3);
-        let target3 = model.transform(src3, cache);
+        let target3 = model.transform_async(src3, cache).await;
         let expect3 = DataField::from_chars("Result".to_string(), "default message".to_string());
         assert_eq!(
             target3.field("Result").map(|s| s.as_field()),
@@ -830,8 +847,8 @@ Result = match read(status) {
         );
     }
 
-    #[test]
-    fn test_cond_fun_parsing() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_cond_fun_parsing() {
         // Test parsing just the condition
         let mut code = r#"starts_with('test')"#;
         let result = cond_fun(&mut code);
@@ -856,8 +873,8 @@ Result = match read(status) {
         }
     }
 
-    #[test]
-    fn test_match_with_regex() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_with_regex() {
         use wp_primitives::Parser;
 
         // Test regex matching - verify round-trip parsing works
@@ -897,8 +914,8 @@ Result = match read(status) {
         );
     }
 
-    #[test]
-    fn test_match_with_is_empty() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_with_is_empty() {
         // Test is_empty function
         let mut code = r#" match read(field) {
         is_empty() => chars(empty),
@@ -908,8 +925,8 @@ Result = match read(status) {
         assert_oml_parse(&mut code, oml_aga_match);
     }
 
-    #[test]
-    fn test_match_with_iequals() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_with_iequals() {
         // Test case-insensitive matching
         let mut code = r#" match read(status) {
         iequals('success') => chars(ok),
@@ -921,8 +938,8 @@ Result = match read(status) {
         assert_oml_parse(&mut code, oml_aga_match);
     }
 
-    #[test]
-    fn test_match_with_numeric_comparison() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_with_numeric_comparison() {
         // Test gt
         let mut code = r#" match read(count) {
         gt(100) => chars(high),
@@ -958,8 +975,8 @@ Result = match read(status) {
         assert_oml_parse(&mut code4, oml_aga_match);
     }
 
-    #[test]
-    fn test_match_function_escaping_round_trip() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_function_escaping_round_trip() {
         use wp_primitives::Parser;
 
         // Test strings with special characters in match functions
@@ -1005,24 +1022,24 @@ Result = match read(status) {
         }
     }
 
-    #[test]
-    fn test_match_cond3_item_parse() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_cond3_item_parse() {
         // Test parsing a triple condition item
         let mut code = r#"(chars(A), chars(B), chars(C)) => chars(result),"#;
         let x = match_cond_multi_item(&mut code);
         assert!(x.is_ok(), "Should parse triple condition item: {:?}", x);
     }
 
-    #[test]
-    fn test_match_cond4_item_parse() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_cond4_item_parse() {
         // Test parsing a quadruple condition item
         let mut code = r#"(chars(A), chars(B), chars(C), chars(D)) => chars(result),"#;
         let x = match_cond_multi_item(&mut code);
         assert!(x.is_ok(), "Should parse quadruple condition item: {:?}", x);
     }
 
-    #[test]
-    fn test_match_triple_source() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_triple_source() {
         // Test match with three sources
         let mut code = r#" match ( read(city), read(region), read(country) ) {
         (chars(bj), chars(north), chars(cn)) => chars(result1),
@@ -1033,8 +1050,8 @@ Result = match read(status) {
         assert_oml_parse(&mut code, oml_aga_match);
     }
 
-    #[test]
-    fn test_match_triple_source_with_mixed_cond() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_triple_source_with_mixed_cond() {
         // Test match with three sources using different condition types
         let mut code = r#" match ( read(ip_field), read(level), read(zone) ) {
         (in (ip(10.0.0.1), ip(10.0.0.100)), chars(high), chars(east)) => chars(block),
@@ -1045,8 +1062,8 @@ Result = match read(status) {
         assert_oml_parse(&mut code, oml_aga_match);
     }
 
-    #[test]
-    fn test_match_quadruple_source() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_quadruple_source() {
         // Test match with four sources
         let mut code = r#" match ( read(a), read(b), read(c), read(d) ) {
         (chars(1), chars(2), chars(3), chars(4)) => chars(match1),
@@ -1057,8 +1074,8 @@ Result = match read(status) {
         assert_oml_parse(&mut code, oml_aga_match);
     }
 
-    #[test]
-    fn test_match_quadruple_source_with_mixed_cond() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_quadruple_source_with_mixed_cond() {
         // Test match with four sources using mixed condition types
         let mut code = r#" match ( read(src_ip), read(dst_ip), read(proto), read(action) ) {
         (in (ip(10.0.0.1), ip(10.0.0.255)), ip(192.168.1.1), chars(tcp), chars(allow)) => chars(rule1),
@@ -1069,8 +1086,8 @@ Result = match read(status) {
         assert_oml_parse(&mut code, oml_aga_match);
     }
 
-    #[test]
-    fn test_match_triple_round_trip() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_triple_round_trip() {
         use wp_primitives::Parser;
 
         let mut code = r#" match ( read(a), read(b), read(c) ) {
@@ -1091,8 +1108,8 @@ Result = match read(status) {
         assert!(result2.is_ok(), "Round-trip parse should succeed");
     }
 
-    #[test]
-    fn test_match_quadruple_round_trip() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_quadruple_round_trip() {
         use wp_primitives::Parser;
 
         let mut code = r#" match ( read(a), read(b), read(c), read(d) ) {
@@ -1113,8 +1130,8 @@ Result = match read(status) {
         assert!(result2.is_ok(), "Round-trip parse should succeed");
     }
 
-    #[test]
-    fn test_oml_parse_with_triple_match() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_oml_parse_with_triple_match() {
         use crate::parser::oml_parse_raw;
 
         let mut conf = r#"name : test
@@ -1124,7 +1141,7 @@ A = match (read(f1), read(f2), read(f3)) {
     _ => chars(fail),
 };
 "#;
-        let result = oml_parse_raw(&mut conf);
+        let result = oml_parse_raw(&mut conf).await;
         assert!(
             result.is_ok(),
             "Triple match OML parse should succeed: {:?}",
@@ -1132,8 +1149,8 @@ A = match (read(f1), read(f2), read(f3)) {
         );
     }
 
-    #[test]
-    fn test_oml_parse_with_quadruple_match() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_oml_parse_with_quadruple_match() {
         use crate::parser::oml_parse_raw;
 
         let mut conf = r#"name : test
@@ -1143,7 +1160,7 @@ A = match (read(f1), read(f2), read(f3), read(f4)) {
     _ => chars(fail),
 };
 "#;
-        let result = oml_parse_raw(&mut conf);
+        let result = oml_parse_raw(&mut conf).await;
         assert!(
             result.is_ok(),
             "Quadruple match OML parse should succeed: {:?}",
@@ -1151,9 +1168,8 @@ A = match (read(f1), read(f2), read(f3), read(f4)) {
         );
     }
 
-    #[test]
-    fn test_match_triple_execution() {
-        use crate::core::DataTransformer;
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_triple_execution() {
         use crate::parser::oml_parse_raw;
         use wp_knowledge::cache::FieldQueryCache;
         use wp_model_core::model::DataRecord;
@@ -1166,7 +1182,9 @@ Result = match (read(city), read(level), read(zone)) {
     _ => chars(default),
 };
 "#;
-        let model = oml_parse_raw(&mut conf).expect("Failed to parse triple match");
+        let model = oml_parse_raw(&mut conf)
+            .await
+            .expect("Failed to parse triple match");
 
         // Test case 1: all three match
         let data = vec![
@@ -1175,7 +1193,7 @@ Result = match (read(city), read(level), read(zone)) {
             FieldStorage::from_owned(DataField::from_chars("zone", "north")),
         ];
         let src = DataRecord::from(data);
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
         let expect = DataField::from_chars("Result".to_string(), "matched".to_string());
         assert_eq!(target.field("Result").map(|s| s.as_field()), Some(&expect));
 
@@ -1186,7 +1204,7 @@ Result = match (read(city), read(level), read(zone)) {
             FieldStorage::from_owned(DataField::from_chars("zone", "north")),
         ];
         let src2 = DataRecord::from(data2);
-        let target2 = model.transform(src2, cache);
+        let target2 = model.transform_async(src2, cache).await;
         let expect2 = DataField::from_chars("Result".to_string(), "default".to_string());
         assert_eq!(
             target2.field("Result").map(|s| s.as_field()),
@@ -1194,9 +1212,8 @@ Result = match (read(city), read(level), read(zone)) {
         );
     }
 
-    #[test]
-    fn test_match_quadruple_execution() {
-        use crate::core::DataTransformer;
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_match_quadruple_execution() {
         use crate::parser::oml_parse_raw;
         use wp_knowledge::cache::FieldQueryCache;
         use wp_model_core::model::DataRecord;
@@ -1210,7 +1227,9 @@ Result = match (read(a), read(b), read(c), read(d)) {
     _ => chars(default),
 };
 "#;
-        let model = oml_parse_raw(&mut conf).expect("Failed to parse quadruple match");
+        let model = oml_parse_raw(&mut conf)
+            .await
+            .expect("Failed to parse quadruple match");
 
         // Test case 1: first arm matches
         let data = vec![
@@ -1220,7 +1239,7 @@ Result = match (read(a), read(b), read(c), read(d)) {
             FieldStorage::from_owned(DataField::from_chars("d", "w")),
         ];
         let src = DataRecord::from(data);
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
         let expect = DataField::from_chars("Result".to_string(), "all_match".to_string());
         assert_eq!(target.field("Result").map(|s| s.as_field()), Some(&expect));
 
@@ -1232,7 +1251,7 @@ Result = match (read(a), read(b), read(c), read(d)) {
             FieldStorage::from_owned(DataField::from_chars("d", "other")),
         ];
         let src2 = DataRecord::from(data2);
-        let target2 = model.transform(src2, cache);
+        let target2 = model.transform_async(src2, cache).await;
         let expect2 = DataField::from_chars("Result".to_string(), "partial".to_string());
         assert_eq!(
             target2.field("Result").map(|s| s.as_field()),
@@ -1247,7 +1266,7 @@ Result = match (read(a), read(b), read(c), read(d)) {
             FieldStorage::from_owned(DataField::from_chars("d", "at_all")),
         ];
         let src3 = DataRecord::from(data3);
-        let target3 = model.transform(src3, cache);
+        let target3 = model.transform_async(src3, cache).await;
         let expect3 = DataField::from_chars("Result".to_string(), "default".to_string());
         assert_eq!(
             target3.field("Result").map(|s| s.as_field()),
@@ -1257,8 +1276,8 @@ Result = match (read(a), read(b), read(c), read(d)) {
 
     // ==================== OR Support Tests ====================
 
-    #[test]
-    fn test_or_single_source_parse() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_or_single_source_parse() {
         // Test OR in single-source match
         let mut code = r#" match read(city) {
             chars(bj) | chars(sh) => chars(east),
@@ -1269,8 +1288,8 @@ Result = match (read(a), read(b), read(c), read(d)) {
         assert_oml_parse(&mut code, oml_aga_match);
     }
 
-    #[test]
-    fn test_or_multi_source_parse() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_or_multi_source_parse() {
         // Test OR in multi-source match
         let mut code = r#" match (read(city), read(level)) {
             (chars(bj) | chars(sh), chars(high)) => chars(priority),
@@ -1281,8 +1300,8 @@ Result = match (read(a), read(b), read(c), read(d)) {
         assert_oml_parse(&mut code, oml_aga_match);
     }
 
-    #[test]
-    fn test_or_round_trip() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_or_round_trip() {
         use wp_primitives::Parser;
 
         let mut code = r#" match read(city) {
@@ -1303,9 +1322,8 @@ Result = match (read(a), read(b), read(c), read(d)) {
         assert!(result2.is_ok(), "OR round-trip parse should succeed");
     }
 
-    #[test]
-    fn test_or_single_source_execution() {
-        use crate::core::DataTransformer;
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_or_single_source_execution() {
         use crate::parser::oml_parse_raw;
         use wp_knowledge::cache::FieldQueryCache;
         use wp_model_core::model::DataRecord;
@@ -1319,14 +1337,16 @@ Result = match read(city) {
     _ => chars(other),
 };
 "#;
-        let model = oml_parse_raw(&mut conf).expect("Failed to parse OR match");
+        let model = oml_parse_raw(&mut conf)
+            .await
+            .expect("Failed to parse OR match");
 
         // Test: first alternative matches
         let data = vec![FieldStorage::from_owned(DataField::from_chars(
             "city", "bj",
         ))];
         let src = DataRecord::from(data);
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
         let expect = DataField::from_chars("Result", "tier1");
         assert_eq!(target.field("Result").map(|s| s.as_field()), Some(&expect));
 
@@ -1335,7 +1355,7 @@ Result = match read(city) {
             "city", "sh",
         ))];
         let src = DataRecord::from(data);
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
         assert_eq!(target.field("Result").map(|s| s.as_field()), Some(&expect));
 
         // Test: third alternative matches
@@ -1343,7 +1363,7 @@ Result = match read(city) {
             "city", "gz",
         ))];
         let src = DataRecord::from(data);
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
         assert_eq!(target.field("Result").map(|s| s.as_field()), Some(&expect));
 
         // Test: second arm
@@ -1351,7 +1371,7 @@ Result = match read(city) {
             "city", "cd",
         ))];
         let src = DataRecord::from(data);
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
         let expect2 = DataField::from_chars("Result", "tier2");
         assert_eq!(target.field("Result").map(|s| s.as_field()), Some(&expect2));
 
@@ -1360,14 +1380,13 @@ Result = match read(city) {
             "city", "unknown",
         ))];
         let src = DataRecord::from(data);
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
         let expect3 = DataField::from_chars("Result", "other");
         assert_eq!(target.field("Result").map(|s| s.as_field()), Some(&expect3));
     }
 
-    #[test]
-    fn test_or_multi_source_execution() {
-        use crate::core::DataTransformer;
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_or_multi_source_execution() {
         use crate::parser::oml_parse_raw;
         use wp_knowledge::cache::FieldQueryCache;
         use wp_model_core::model::DataRecord;
@@ -1381,7 +1400,9 @@ Result = match (read(city), read(level)) {
     _ => chars(default),
 };
 "#;
-        let model = oml_parse_raw(&mut conf).expect("Failed to parse OR multi match");
+        let model = oml_parse_raw(&mut conf)
+            .await
+            .expect("Failed to parse OR multi match");
 
         // Test: city=bj, level=high => priority
         let data = vec![
@@ -1389,7 +1410,7 @@ Result = match (read(city), read(level)) {
             FieldStorage::from_owned(DataField::from_chars("level", "high")),
         ];
         let src = DataRecord::from(data);
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
         let expect = DataField::from_chars("Result", "priority");
         assert_eq!(target.field("Result").map(|s| s.as_field()), Some(&expect));
 
@@ -1399,7 +1420,7 @@ Result = match (read(city), read(level)) {
             FieldStorage::from_owned(DataField::from_chars("level", "high")),
         ];
         let src = DataRecord::from(data);
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
         assert_eq!(target.field("Result").map(|s| s.as_field()), Some(&expect));
 
         // Test: city=gz, level=low (OR alt) => normal
@@ -1408,7 +1429,7 @@ Result = match (read(city), read(level)) {
             FieldStorage::from_owned(DataField::from_chars("level", "low")),
         ];
         let src = DataRecord::from(data);
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
         let expect2 = DataField::from_chars("Result", "normal");
         assert_eq!(target.field("Result").map(|s| s.as_field()), Some(&expect2));
 
@@ -1418,7 +1439,7 @@ Result = match (read(city), read(level)) {
             FieldStorage::from_owned(DataField::from_chars("level", "mid")),
         ];
         let src = DataRecord::from(data);
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
         assert_eq!(target.field("Result").map(|s| s.as_field()), Some(&expect2));
 
         // Test: no match => default
@@ -1427,7 +1448,7 @@ Result = match (read(city), read(level)) {
             FieldStorage::from_owned(DataField::from_chars("level", "high")),
         ];
         let src = DataRecord::from(data);
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
         let expect3 = DataField::from_chars("Result", "default");
         assert_eq!(target.field("Result").map(|s| s.as_field()), Some(&expect3));
     }

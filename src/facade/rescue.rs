@@ -35,6 +35,7 @@ impl WpRescueApp {
     pub fn try_from(args: ParseArgs, val_dict: EnvDict) -> Result<Self, wp_error::RunError> {
         let (conf_manager, main_conf) =
             load_warp_engine_confs(resolve_run_work_root(&args.work_root)?.as_str(), &val_dict)?;
+        crate::knowledge::ensure_stats_telemetry_bridge_installed();
         let run_args = args.completion_from(&main_conf)?;
         let stat_reqs = stat_reqs_from(main_conf.stat_conf());
         log_init(main_conf.log_conf()).err_conv()?;

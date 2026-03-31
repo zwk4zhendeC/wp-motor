@@ -44,14 +44,14 @@ impl ValueProcessor for crate::language::MapTo {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::DataTransformer;
+    use crate::core::AsyncDataTransformer;
     use crate::parser::oml_parse_raw;
     use orion_error::TestAssert;
     use wp_knowledge::cache::FieldQueryCache;
     use wp_model_core::model::{DataField, DataRecord, FieldStorage};
 
-    #[test]
-    fn test_pipe_path_get() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_pipe_path_get() {
         let cache = &mut FieldQueryCache::default();
         let data = vec![FieldStorage::from_owned(DataField::from_chars(
             "A1",
@@ -64,9 +64,9 @@ mod tests {
         ---
         X : chars =  pipe take(A1) | path(name);
          "#;
-        let model = oml_parse_raw(&mut conf).unwrap();
+        let model = oml_parse_raw(&mut conf).await.unwrap();
 
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
 
         let expect = DataField::from_chars(
             "X".to_string(),
@@ -75,8 +75,8 @@ mod tests {
         assert_eq!(target.field("X").map(|s| s.as_field()), Some(&expect));
     }
 
-    #[test]
-    fn test_pipe_url_get() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_pipe_url_get() {
         let cache = &mut FieldQueryCache::default();
         let data = vec![FieldStorage::from_owned(DataField::from_chars(
             "A1",
@@ -93,9 +93,9 @@ mod tests {
         D : chars =  pipe read(A1) | url(path);
         E : chars =  pipe read(A1) | url(params);
          "#;
-        let model = oml_parse_raw(&mut conf).unwrap();
+        let model = oml_parse_raw(&mut conf).await.unwrap();
 
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
 
         let expect = DataField::from_chars("A".to_string(), "a.b.com".to_string());
         assert_eq!(target.field("A").map(|s| s.as_field()), Some(&expect));
@@ -115,8 +115,8 @@ mod tests {
         assert_eq!(target.field("E").map(|s| s.as_field()), Some(&expect));
     }
 
-    #[test]
-    fn test_pipe_base64() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_pipe_base64() {
         let cache = &mut FieldQueryCache::default();
         let data = vec![
             FieldStorage::from_owned(DataField::from_chars("A1", "hello1")),
@@ -138,9 +138,9 @@ mod tests {
         Y : chars =  pipe take(B2) | base64_decode(Imap) ;
         Z : chars =  pipe take(C3) | base64_decode(Imap) ;
          "#;
-        let model = oml_parse_raw(&mut conf).unwrap();
+        let model = oml_parse_raw(&mut conf).await.unwrap();
 
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
 
         let expect = DataField::from_chars("X".to_string(), "hello1".to_string());
         assert_eq!(target.field("X").map(|s| s.as_field()), Some(&expect));
@@ -152,8 +152,8 @@ mod tests {
         assert_eq!(target.field("Z").map(|s| s.as_field()), Some(&expect));
     }
 
-    #[test]
-    fn test_html_escape() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_html_escape() {
         let cache = &mut FieldQueryCache::default();
         let data = vec![FieldStorage::from_owned(DataField::from_chars(
             "A1", "<html>",
@@ -165,16 +165,16 @@ mod tests {
         ---
         X : chars =  pipe take(A1) | html_escape | html_unescape;
          "#;
-        let model = oml_parse_raw(&mut conf).assert();
+        let model = oml_parse_raw(&mut conf).await.assert();
 
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
 
         let expect = DataField::from_chars("X".to_string(), "<html>".to_string());
         assert_eq!(target.field("X").map(|s| s.as_field()), Some(&expect));
     }
 
-    #[test]
-    fn test_str_escape() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_str_escape() {
         let cache = &mut FieldQueryCache::default();
         let data = vec![FieldStorage::from_owned(DataField::from_chars(
             "A1", "html\"1_",
@@ -186,16 +186,16 @@ mod tests {
         ---
         X : chars =  pipe take(A1) | str_escape  ;
          "#;
-        let model = oml_parse_raw(&mut conf).assert();
+        let model = oml_parse_raw(&mut conf).await.assert();
 
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
 
         let expect = DataField::from_chars("X".to_string(), r#"html\"1_"#.to_string());
         assert_eq!(target.field("X").map(|s| s.as_field()), Some(&expect));
     }
 
-    #[test]
-    fn test_json_escape() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_json_escape() {
         let cache = &mut FieldQueryCache::default();
         let data = vec![FieldStorage::from_owned(DataField::from_chars(
             "A1",
@@ -208,16 +208,16 @@ mod tests {
         ---
         X : chars =  pipe take(A1) | json_escape  | json_unescape ;
          "#;
-        let model = oml_parse_raw(&mut conf).assert();
+        let model = oml_parse_raw(&mut conf).await.assert();
 
-        let target = model.transform(src, cache);
+        let target = model.transform_async(src, cache).await;
 
         let expect = DataField::from_chars("X".to_string(), "This is a crab: 🦀".to_string());
         assert_eq!(target.field("X").map(|s| s.as_field()), Some(&expect));
     }
 
-    #[test]
-    fn test_pipe_time() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_pipe_time() {
         let cache = &mut FieldQueryCache::default();
         let data = vec![FieldStorage::from_owned(DataField::from_chars(
             "A1", "<html>",
@@ -232,8 +232,8 @@ mod tests {
         Z  =  pipe  read(Y) | Time::to_ts_ms ;
         U  =  pipe  read(Y) | Time::to_ts_us ;
          "#;
-        let model = oml_parse_raw(&mut conf).assert();
-        let target = model.transform(src, cache);
+        let model = oml_parse_raw(&mut conf).await.assert();
+        let target = model.transform_async(src, cache).await;
         //let expect = TDOEnum::from_digit("X".to_string(), 971136000);
         let expect = DataField::from_digit("X".to_string(), 971107200);
         assert_eq!(target.field("X").map(|s| s.as_field()), Some(&expect));
@@ -244,8 +244,8 @@ mod tests {
         assert_eq!(target.field("U").map(|s| s.as_field()), Some(&expect));
     }
 
-    #[test]
-    fn test_pipe_skip() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_pipe_skip() {
         let cache = &mut FieldQueryCache::default();
         let data = vec![
             FieldStorage::from_owned(DataField::from_digit("A1", 0)),
@@ -260,8 +260,8 @@ mod tests {
         Y  =  pipe  read(A1) | skip_empty ;
         Z  =  pipe  read(A2) | skip_empty ;
          "#;
-        let model = oml_parse_raw(&mut conf).assert();
-        let target = model.transform(src, cache);
+        let model = oml_parse_raw(&mut conf).await.assert();
+        let target = model.transform_async(src, cache).await;
         let expect = DataField::from_arr(
             "X".to_string(),
             vec![
@@ -280,8 +280,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_pipe_obj_get() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_pipe_obj_get() {
         let val = r#"{"id":0,"items":[{"meta":{"array":"obj"},"name":"current_process","value":{"Array":[{"meta":"obj","name":"obj","value":{"Obj":{"ctime":{"meta":"digit","name":"ctime","value":{"Digit":1676340214}},"desc":{"meta":"chars","name":"desc","value":{"Chars":""}},"md5":{"meta":"chars","name":"md5","value":{"Chars":"d4ed19a8acd9df02123f655fa1e8a8e7"}},"path":{"meta":"chars","name":"path","value":{"Chars":"c:\\\\users\\\\administrator\\\\desktop\\\\domaintool\\\\x64\\\\childproc\\\\test_le9mwv.exe"}},"sign":{"meta":"chars","name":"sign","value":{"Chars":""}},"size":{"meta":"digit","name":"size","value":{"Digit":189446}},"state":{"meta":"digit","name":"state","value":{"Digit":0}},"type":{"meta":"digit","name":"type","value":{"Digit":1}}}}}]}}]}"#;
         let src: DataRecord = serde_json::from_str(val).unwrap();
         let cache = &mut FieldQueryCache::default();
@@ -291,8 +291,8 @@ mod tests {
         ---
         Y  =  pipe read(current_process) | nth(0) | get(current_process/path) ;
          "#;
-        let model = oml_parse_raw(&mut conf).assert();
-        let target = model.transform(src, cache);
+        let model = oml_parse_raw(&mut conf).await.assert();
+        let target = model.transform_async(src, cache).await;
         let expect = DataField::from_chars(
             "Y",
             r#"c:\\users\\administrator\\desktop\\domaintool\\x64\\childproc\\test_le9mwv.exe"#,
@@ -300,8 +300,8 @@ mod tests {
         assert_eq!(target.field("Y").map(|s| s.as_field()), Some(&expect));
     }
 
-    #[test]
-    fn test_pipe_start_with() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_pipe_start_with() {
         // 测试匹配的情况
         let cache = &mut FieldQueryCache::default();
         let data = vec![FieldStorage::from_owned(DataField::from_chars(
@@ -315,8 +315,8 @@ mod tests {
         ---
         X  =  pipe take(url) | starts_with('https://');
          "#;
-        let model = oml_parse_raw(&mut conf).assert();
-        let target = model.transform(src, cache);
+        let model = oml_parse_raw(&mut conf).await.assert();
+        let target = model.transform_async(src, cache).await;
 
         let expect = DataField::from_chars("X".to_string(), "https://example.com".to_string());
         assert_eq!(target.field("X").map(|s| s.as_field()), Some(&expect));
@@ -334,8 +334,8 @@ mod tests {
         ---
         X  =  pipe take(url) | starts_with('https://');
          "#;
-        let model2 = oml_parse_raw(&mut conf2).assert();
-        let target2 = model2.transform(src2, cache2);
+        let model2 = oml_parse_raw(&mut conf2).await.assert();
+        let target2 = model2.transform_async(src2, cache2).await;
 
         // 不匹配时应该返回 ignore 字段
         assert_eq!(
@@ -344,8 +344,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_pipe_map_to() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_pipe_map_to() {
         let cache = &mut FieldQueryCache::default();
 
         // 测试映射到字符串
@@ -359,8 +359,8 @@ mod tests {
         ---
         A  =  pipe take(status) | map_to('success');
          "#;
-        let model = oml_parse_raw(&mut conf).assert();
-        let target = model.transform(src, cache);
+        let model = oml_parse_raw(&mut conf).await.assert();
+        let target = model.transform_async(src, cache).await;
 
         let expect = DataField::from_chars("A".to_string(), "success".to_string());
         assert_eq!(target.field("A").map(|s| s.as_field()), Some(&expect));
@@ -377,8 +377,8 @@ mod tests {
         ---
         B  =  pipe take(level) | map_to(1);
          "#;
-        let model2 = oml_parse_raw(&mut conf2).assert();
-        let target2 = model2.transform(src2, cache2);
+        let model2 = oml_parse_raw(&mut conf2).await.assert();
+        let target2 = model2.transform_async(src2, cache2).await;
 
         let expect2 = DataField::from_digit("B".to_string(), 1);
         assert_eq!(target2.field("B").map(|s| s.as_field()), Some(&expect2));
@@ -395,8 +395,8 @@ mod tests {
         ---
         C  =  pipe take(temp) | map_to(36.5);
          "#;
-        let model3 = oml_parse_raw(&mut conf3).assert();
-        let target3 = model3.transform(src3, cache3);
+        let model3 = oml_parse_raw(&mut conf3).await.assert();
+        let target3 = model3.transform_async(src3, cache3).await;
 
         let expect3 = DataField::from_float("C".to_string(), 36.5);
         assert_eq!(target3.field("C").map(|s| s.as_field()), Some(&expect3));
@@ -413,8 +413,8 @@ mod tests {
         ---
         D  =  pipe take(flag) | map_to(true);
          "#;
-        let model4 = oml_parse_raw(&mut conf4).assert();
-        let target4 = model4.transform(src4, cache4);
+        let model4 = oml_parse_raw(&mut conf4).await.assert();
+        let target4 = model4.transform_async(src4, cache4).await;
 
         let expect4 = DataField::from_bool("D".to_string(), true);
         assert_eq!(target4.field("D").map(|s| s.as_field()), Some(&expect4));
@@ -432,8 +432,8 @@ mod tests {
         ---
         E  =  pipe take(url) | starts_with('https://') | map_to('secure');
          "#;
-        let model5 = oml_parse_raw(&mut conf5).assert();
-        let target5 = model5.transform(src5, cache5);
+        let model5 = oml_parse_raw(&mut conf5).await.assert();
+        let target5 = model5.transform_async(src5, cache5).await;
 
         // 字段为 ignore 时，应该保持 ignore
         assert_eq!(

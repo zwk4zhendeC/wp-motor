@@ -41,26 +41,55 @@ impl OmlIssue {
 #[cfg(feature = "oml-diag")]
 mod inner {
     use super::OmlIssue;
-    use std::cell::RefCell;
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    use tokio::task;
 
-    thread_local! {
-        static DIAG: RefCell<Vec<OmlIssue>> = const { RefCell::new(Vec::new()) };
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    enum DiagScope {
+        Task(task::Id),
+        Thread(std::thread::ThreadId),
+    }
+
+    fn current_scope() -> DiagScope {
+        if let Some(task_id) = task::try_id() {
+            DiagScope::Task(task_id)
+        } else {
+            DiagScope::Thread(std::thread::current().id())
+        }
+    }
+
+    fn diag_store() -> &'static Mutex<HashMap<DiagScope, Vec<OmlIssue>>> {
+        static DIAG: OnceLock<Mutex<HashMap<DiagScope, Vec<OmlIssue>>>> = OnceLock::new();
+        DIAG.get_or_init(|| Mutex::new(HashMap::new()))
     }
 
     pub fn reset() {
-        DIAG.with(|b| b.borrow_mut().clear());
+        let scope = current_scope();
+        let mut store = diag_store()
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        store.remove(&scope);
     }
+
     pub fn push(issue: OmlIssue) {
         // 给一个小上限，避免异常风暴
-        DIAG.with(|b| {
-            let mut v = b.borrow_mut();
-            if v.len() < 16 {
-                v.push(issue);
-            }
-        });
+        let scope = current_scope();
+        let mut store = diag_store()
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let entries = store.entry(scope).or_default();
+        if entries.len() < 16 {
+            entries.push(issue);
+        }
     }
+
     pub fn take() -> Vec<OmlIssue> {
-        DIAG.with(|b| std::mem::take(&mut *b.borrow_mut()))
+        let scope = current_scope();
+        let mut store = diag_store()
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        store.remove(&scope).unwrap_or_default()
     }
 }
 

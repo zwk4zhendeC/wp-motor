@@ -377,6 +377,7 @@ pub async fn start_warp_service(
 
     // 启动监控任务
     let (moni_send, moni_group) = start_moni_tasks(&args, &resource, &stat_reqs);
+    crate::knowledge::attach_stats_monitor_sender(moni_send.clone());
 
     // 准备收集与接受器清单（先取接受器，避免被 `get_all_sources` 消费源结构）
     let mut acceptor_group_opt = if matches!(run_mode, RunMode::Daemon) {

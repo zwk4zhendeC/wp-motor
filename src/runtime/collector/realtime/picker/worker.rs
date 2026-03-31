@@ -100,9 +100,10 @@ impl SourceWorker {
 
         info_ctrl!("Closing data source '{}'", source_id);
         trace_ctrl!(
-            "{}-picker closing with pending={}",
+            "{}-picker closing with pending={} pending_bytes={}",
             source_id,
-            self.picker.pending_count()
+            self.picker.pending_count(),
+            self.picker.pending_bytes()
         );
         if let Err(e) = source.close().await {
             error_data!("Failed to close data source '{}': {}", source_id, e);
@@ -116,10 +117,11 @@ impl SourceWorker {
             );
         } else {
             info_ctrl!(
-                "{}-picker dispatch loop exited (max_line={:?}, total_pending={})",
+                "{}-picker dispatch loop exited (max_line={:?}, total_pending={} total_pending_bytes={})",
                 source_id,
                 max_line,
-                self.picker.pending_count()
+                self.picker.pending_count(),
+                self.picker.pending_bytes()
             );
         }
 
@@ -248,6 +250,7 @@ impl SourceWorker {
                     rt_name,
                     self.picker.pending_count()
                 );
+                info_mtrc!("{} pick-pending bytes: {}", rt_name, self.picker.pending_bytes());
                 stat_ext
                     .send_stat(&self.mon_s)
                     .await

@@ -30,7 +30,7 @@ impl EnvEvaluable<ProjectRemoteConf> for ProjectRemoteConf {
     }
 }
 
-#[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
+#[derive(Debug, Default, PartialEq, Deserialize, Serialize, Clone)]
 pub struct AdminApiTlsConf {
     #[serde(default, alias = "enable")]
     pub enabled: bool,
@@ -38,16 +38,6 @@ pub struct AdminApiTlsConf {
     pub cert_file: String,
     #[serde(default)]
     pub key_file: String,
-}
-
-impl Default for AdminApiTlsConf {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            cert_file: String::new(),
-            key_file: String::new(),
-        }
-    }
 }
 
 impl EnvEvaluable<AdminApiTlsConf> for AdminApiTlsConf {

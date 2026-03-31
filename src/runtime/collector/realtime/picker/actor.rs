@@ -1,10 +1,14 @@
-use crate::runtime::collector::realtime::constants::PICKER_PENDING_CAPACITY;
+use crate::runtime::collector::realtime::constants::{
+    PICKER_PENDING_CAPACITY, PICKER_PENDING_MAX_BYTES,
+};
 use crate::runtime::collector::realtime::picker::policy::PostPolicy;
 use crate::runtime::collector::realtime::picker::policy::PullPolicy;
 use crate::runtime::parser::workflow::ParseDispatchRouter;
 use std::collections::VecDeque;
 
 use wp_connector_api::SourceBatch;
+use wp_connector_api::SourceEvent;
+use wp_model_core::raw::RawData;
 /// Picker state and constructor.
 /// JM is my wife ,Thank JM for her support in WarpParse development.
 #[derive(getset::Getters, getset::MutGetters)]
@@ -14,6 +18,7 @@ pub struct JMActPicker {
     #[get = "pub"]
     parse_router: ParseDispatchRouter,
     pending: VecDeque<SourceBatch>,
+    pending_bytes: usize,
     #[get_mut = "pub"]
     post_policy: PostPolicy,
     #[get_mut = "pub"]
@@ -28,6 +33,7 @@ impl JMActPicker {
         Self {
             parse_router,
             pending: VecDeque::with_capacity(PICKER_PENDING_CAPACITY),
+            pending_bytes: 0,
             post_policy: PostPolicy::new(burst),
             pull_policy: PullPolicy::new(burst),
         }
@@ -37,14 +43,19 @@ impl JMActPicker {
 
     #[inline]
     pub(crate) fn take_pending(&mut self) -> Option<SourceBatch> {
-        self.pending.pop_front()
+        let batch = self.pending.pop_front()?;
+        self.pending_bytes = self.pending_bytes.saturating_sub(batch_bytes(&batch));
+        Some(batch)
     }
     #[inline]
     pub(crate) fn set_pending_front(&mut self, batch: SourceBatch) {
+        self.pending_bytes = self.pending_bytes.saturating_add(batch_bytes(&batch));
         self.pending.push_front(batch);
     }
     #[inline]
     pub(crate) fn extend_pending(&mut self, batch: SourceBatch) {
+        let batch_bytes = batch_bytes(&batch);
+        self.pending_bytes = self.pending_bytes.saturating_add(batch_bytes);
         self.pending.push_back(batch);
         // 当 pending 水位接近上限时，抽样打印，辅助定位“解析前积压”导致的内存增长
         const WARN_THRESHOLD: usize =
@@ -54,15 +65,21 @@ impl JMActPicker {
             sample_log_with_hits!(
                 PENDING_HI_HITS,
                 warn_mtrc,
-                "backpressure: picker pending high water: {} / {}",
+                "backpressure: picker pending high water: {} / {} (pending_bytes={} max_bytes={})",
                 self.pending.len(),
-                crate::runtime::collector::realtime::constants::PICKER_PENDING_CAPACITY
+                crate::runtime::collector::realtime::constants::PICKER_PENDING_CAPACITY,
+                self.pending_bytes,
+                PICKER_PENDING_MAX_BYTES
             );
         }
     }
     #[inline]
     pub(crate) fn pending_count(&self) -> usize {
         self.pending.len()
+    }
+    #[inline]
+    pub(crate) fn pending_bytes_at_capacity(&self) -> bool {
+        self.pending_bytes >= PICKER_PENDING_MAX_BYTES
     }
 
     /// 合并前端的多个小批次，尽量把事件数凑到 `max_events`，用于减少“批数”对解析通道的占用。
@@ -99,5 +116,59 @@ impl JMActPicker {
         } else {
             Some(merged)
         }
+    }
+}
+
+fn batch_bytes(batch: &SourceBatch) -> usize {
+    batch.iter().map(event_payload_len).sum()
+}
+
+fn event_payload_len(ev: &SourceEvent) -> usize {
+    match &ev.payload {
+        RawData::String(s) => s.len(),
+        RawData::Bytes(b) => b.len(),
+        RawData::ArcBytes(b) => b.len(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::parser::workflow::ParseDispatchRouter;
+    use crate::sources::event_id::next_event_id;
+    use std::sync::Arc;
+    use wp_connector_api::Tags;
+
+    fn make_event_with_size(tag: &str, size: usize) -> SourceEvent {
+        let mut tags = Tags::new();
+        tags.set("tag", tag.to_string());
+        SourceEvent::new(
+            next_event_id(),
+            tag,
+            RawData::Bytes(vec![b'x'; size].into()),
+            Arc::new(tags),
+        )
+    }
+
+    #[test]
+    fn picker_pending_bytes_tracks_queue_mutations() {
+        let mut picker = JMActPicker::new(ParseDispatchRouter::empty());
+        let first = vec![make_event_with_size("a", 8), make_event_with_size("b", 16)];
+        let second = vec![make_event_with_size("c", 32)];
+
+        picker.extend_pending(first.clone());
+        picker.set_pending_front(second.clone());
+
+        assert_eq!(picker.pending_count(), 2);
+        assert_eq!(*picker.pending_bytes(), batch_bytes(&first) + batch_bytes(&second));
+
+        let front = picker.take_pending().expect("should take front batch");
+        assert_eq!(front.len(), 1);
+        assert_eq!(*picker.pending_bytes(), batch_bytes(&first));
+
+        let tail = picker.take_pending().expect("should take tail batch");
+        assert_eq!(tail.len(), 2);
+        assert_eq!(*picker.pending_bytes(), 0);
+        assert!(!picker.pending_bytes_at_capacity());
     }
 }

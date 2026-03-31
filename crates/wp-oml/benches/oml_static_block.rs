@@ -1,13 +1,13 @@
+mod support;
+
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use oml::core::DataTransformer;
 use oml::language::ObjModel;
-use oml::parser::oml_parse_raw;
+use support::{BenchTransformExt, parse_model};
 use wp_knowledge::cache::FieldQueryCache;
 use wp_model_core::model::{DataField, DataRecord};
 
 fn build_model(code: &str) -> ObjModel {
-    let mut code_ref = code;
-    oml_parse_raw(&mut code_ref).expect("parse OML model for static bench")
+    parse_model(code)
 }
 
 fn bench_static_vs_temp(c: &mut Criterion) {

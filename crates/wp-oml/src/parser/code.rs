@@ -38,10 +38,10 @@ impl OMLCode {
         })
     }
 
-    pub fn load(path: &str) -> OMLCodeResult<DataModel> {
+    pub async fn load(path: &str) -> OMLCodeResult<DataModel> {
         debug_rule!("{} will load", path);
         if std::path::Path::new(path).exists() && path.ends_with(".oml") {
-            Ok(DataModel::Object(ObjModel::load(path)?))
+            Ok(DataModel::Object(ObjModel::load(path).await?))
         } else {
             warn_rule!("{} not exists !", path);
             Ok(DataModel::use_null())

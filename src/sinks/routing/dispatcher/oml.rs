@@ -7,8 +7,7 @@ use crate::sinks::prelude::*;
 // PkgID, info/debug macros
 use crate::sinks::ProcMeta;
 use crate::sinks::SinkRecUnit;
-use crate::sinks::SinkRuntime;
-use oml::core::DataTransformer;
+use oml::core::AsyncDataTransformer;
 use oml::language::{DataModel, ObjModel};
 // std::collections used to be required for HashMap-based fanout; kept minimal now
 use wp_connector_api::SinkResult;
@@ -25,12 +24,6 @@ use wp_model_core::model::{DataField, DataRecord};
 //    从而把 clone 次数从 N 降到 N-1；
 // 4) 取消中间 HashMap 构造，直接生成目标下发列表。
 //
-#[cfg_attr(not(test), allow(dead_code))]
-enum OmlOutcome {
-    Success(DataRecord),
-    Failure(DataRecord),
-}
-
 struct TransformedRecUnit {
     pkg_id: PkgID,
     meta: ProcMeta,
@@ -69,36 +62,7 @@ impl SinkDispatcher {
         None
     }
 
-    #[cfg_attr(not(test), allow(dead_code))]
-    fn run_oml_pipeline(
-        &self,
-        rule: &ProcMeta,
-        input: DataRecord,
-        cache: &mut FieldQueryCache,
-    ) -> SinkResult<OmlOutcome> {
-        let Some(om_ins) = self.get_match_oml(rule) else {
-            return Ok(OmlOutcome::Success(input));
-        };
-
-        let original_len = input.items.len();
-        let output = om_ins.transform(input, cache);
-        if output.items.is_empty() {
-            let mut failed = output.clone();
-            Self::annotate_err(
-                &mut failed,
-                "oml_transform_empty",
-                rule,
-                self.conf.name(),
-                om_ins.name(),
-                original_len,
-                output.items.len(),
-            );
-            return Ok(OmlOutcome::Failure(failed));
-        }
-        Ok(OmlOutcome::Success(output))
-    }
-
-    fn run_oml_pipeline_vec(
+    async fn run_oml_pipeline_vec_async(
         &self,
         wpl_meta: &ProcMeta,
         input: Vec<SinkRecUnit>,
@@ -117,12 +81,22 @@ impl SinkDispatcher {
             return Ok((passthrough, Vec::new()));
         };
 
-        let mut successes = Vec::with_capacity(input.len());
-        let mut failures = Vec::new();
+        let mut contexts = Vec::with_capacity(input.len());
+        let mut records = Vec::with_capacity(input.len());
         for unit in input {
             let (event_id, meta, record_arc) = unit.into_parts();
-            let original_len = record_arc.items.len();
-            let output = om_ins.transform_ref(record_arc.as_ref(), cache);
+            let record = Arc::try_unwrap(record_arc).unwrap_or_else(|arc| arc.as_ref().clone());
+            let original_len = record.items.len();
+            contexts.push((event_id, meta, original_len));
+            records.push(record);
+        }
+
+        let outputs = om_ins.transform_batch_ref_async(&records, cache).await;
+        let mut successes = Vec::with_capacity(outputs.len());
+        let mut failures = Vec::new();
+        for ((event_id, meta, original_len), output) in
+            contexts.into_iter().zip(outputs.into_iter())
+        {
             if output.items.is_empty() {
                 let mut failed = output.clone();
                 Self::annotate_err(
@@ -187,23 +161,7 @@ impl SinkDispatcher {
     }
 
     // 核心 OML 流水线：返回每个 sink 的待发送记录
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub(super) fn oml_proc(
-        &mut self,
-        pkg_id: PkgID,
-        infra: &InfraSinkAgent,
-        cache: &mut FieldQueryCache,
-        rule: &ProcMeta,
-        fds: Arc<DataRecord>,
-    ) -> SinkResult<Vec<(&mut SinkRuntime, Arc<DataRecord>)>> {
-        let has_oml = self.get_match_oml(rule).is_some();
-        if !has_oml && !self.has_conditions() {
-            return Ok(self.emit_without_transform(fds));
-        }
-        self.route_with_transform(pkg_id, infra, cache, rule, fds)
-    }
-
-    pub(super) fn oml_proc_batch(
+    pub(super) async fn oml_proc_batch_async(
         &mut self,
         batch: Vec<SinkRecUnit>,
         infra: &InfraSinkAgent,
@@ -218,31 +176,13 @@ impl SinkDispatcher {
             return Ok(self.emit_without_transform_batch(batch));
         }
 
-        let (successes, failures) = self.run_oml_pipeline_vec(rule, batch, cache)?;
+        let (successes, failures) = self.run_oml_pipeline_vec_async(rule, batch, cache).await?;
         for bad in failures {
             let (pkg_id, _, bad_arc) = bad.into_parts();
             let record = Arc::try_unwrap(bad_arc).unwrap_or_else(|arc| arc.as_ref().clone());
             self.emit_oml_failure(pkg_id, infra, rule, record)?;
         }
         Ok(self.fanout_transformed_batch(successes))
-    }
-
-    #[cfg_attr(not(test), allow(dead_code))]
-    fn emit_without_transform(
-        &mut self,
-        record: Arc<DataRecord>,
-    ) -> Vec<(&mut SinkRuntime, Arc<DataRecord>)> {
-        let mut outputs = Vec::with_capacity(self.sinks.len());
-        for sink in self.sinks.iter_mut() {
-            if sink.pre_tags().is_empty() {
-                outputs.push((sink, Arc::clone(&record)));
-            } else {
-                let mut enriched = (*record).clone();
-                Self::append_pre_tags(&mut enriched, sink.pre_tags());
-                outputs.push((sink, Arc::new(enriched)));
-            }
-        }
-        outputs
     }
 
     fn emit_without_transform_batch(&mut self, entries: Vec<SinkRecUnit>) -> Vec<Vec<SinkRecUnit>> {
@@ -266,41 +206,6 @@ impl SinkDispatcher {
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
-    fn route_with_transform(
-        &mut self,
-        pkg_id: PkgID,
-        infra: &InfraSinkAgent,
-        cache: &mut FieldQueryCache,
-        rule: &ProcMeta,
-        fds: Arc<DataRecord>,
-    ) -> SinkResult<Vec<(&mut SinkRuntime, Arc<DataRecord>)>> {
-        let base = match self.run_oml_pipeline(rule, (*fds).clone(), cache)? {
-            OmlOutcome::Success(base) => base,
-            OmlOutcome::Failure(bad) => {
-                self.emit_oml_failure(pkg_id, infra, rule, bad)?;
-                return Ok(Vec::new());
-            }
-        };
-        let matches = self.evaluate_sink_matches(&base);
-        let mut remaining = matches.iter().filter(|&&m| m).count();
-        if remaining == 0 {
-            return Ok(Vec::new());
-        }
-
-        let mut base_slot = Some(base);
-        let mut outputs = Vec::with_capacity(remaining);
-        for (sink_rt, matched) in self.sinks.iter_mut().zip(matches.into_iter()) {
-            if !matched {
-                continue;
-            }
-            let mut record = Self::acquire_record_for_target(&mut base_slot, remaining);
-            Self::append_pre_tags(&mut record, sink_rt.pre_tags());
-            outputs.push((sink_rt, Arc::new(record)));
-            remaining -= 1;
-        }
-        Ok(outputs)
-    }
-
     fn fanout_transformed_batch(
         &mut self,
         entries: Vec<TransformedRecUnit>,

@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use wp_error::parse_error::OMLCodeResult;
 use wp_model_core::model::FieldStorage;
 
@@ -6,15 +7,6 @@ use crate::core::prelude::*;
 pub trait FieldCollector {
     fn collect_item(&self, name: &str, src: &DataRecordRef<'_>, dst: &DataRecord)
     -> Vec<DataField>;
-}
-
-pub trait ExpEvaluator {
-    fn eval_proc(
-        &self,
-        src: &mut DataRecordRef<'_>,
-        dst: &mut DataRecord,
-        cache: &mut FieldQueryCache,
-    );
 }
 
 pub trait BatchFetcher {
@@ -40,8 +32,19 @@ pub trait ValueProcessor {
     }
 }
 
-impl ExpEvaluator for EvalExp {
-    fn eval_proc(
+#[async_trait]
+pub trait AsyncExpEvaluator {
+    async fn eval_proc_async(
+        &self,
+        src: &mut DataRecordRef<'_>,
+        dst: &mut DataRecord,
+        cache: &mut FieldQueryCache,
+    );
+}
+
+#[async_trait]
+impl AsyncExpEvaluator for EvalExp {
+    async fn eval_proc_async(
         &self,
         src: &mut DataRecordRef<'_>,
         dst: &mut DataRecord,
@@ -49,10 +52,10 @@ impl ExpEvaluator for EvalExp {
     ) {
         match self {
             EvalExp::Single(x) => {
-                x.eval_proc(src, dst, cache);
+                x.eval_proc_async(src, dst, cache).await;
             }
             EvalExp::Batch(x) => {
-                x.eval_proc(src, dst, cache);
+                x.eval_proc_async(src, dst, cache).await;
             }
         }
     }
@@ -61,44 +64,45 @@ impl ExpEvaluator for EvalExp {
 pub trait LibUseAble {
     fn search(&self, lib_n: &str, cond: &DataField, need: &str) -> Option<DataField>;
 }
+
+#[async_trait]
 pub trait ConfADMExt {
-    fn load(path: &str) -> OMLCodeResult<Self>
+    async fn load(path: &str) -> OMLCodeResult<Self>
     where
         Self: Sized;
 }
 
-pub trait DataTransformer {
-    fn transform(&self, data: DataRecord, cache: &mut FieldQueryCache) -> DataRecord;
-    fn transform_ref(&self, data: &DataRecord, cache: &mut FieldQueryCache) -> DataRecord {
-        self.transform(data.clone(), cache)
-    }
-    fn append(&self, data: &mut DataRecord);
+#[async_trait]
+pub trait AsyncDataTransformer {
+    async fn transform_async(&self, data: DataRecord, cache: &mut FieldQueryCache) -> DataRecord;
 
-    /// Batch transform multiple records with shared cache (default implementation)
-    ///
-    /// This default implementation provides backward compatibility by processing
-    /// records one by one. Implementations can override this for better performance
-    /// by reusing the cache and compiled model across all records.
-    fn transform_batch(
+    async fn transform_ref_async(
+        &self,
+        data: &DataRecord,
+        cache: &mut FieldQueryCache,
+    ) -> DataRecord;
+
+    async fn transform_batch_async(
         &self,
         records: Vec<DataRecord>,
         cache: &mut FieldQueryCache,
     ) -> Vec<DataRecord> {
-        records
-            .into_iter()
-            .map(|record| self.transform(record, cache))
-            .collect()
+        let mut out = Vec::with_capacity(records.len());
+        for record in records {
+            out.push(self.transform_async(record, cache).await);
+        }
+        out
     }
 
-    /// Batch transform multiple records (reference version)
-    fn transform_batch_ref(
+    async fn transform_batch_ref_async(
         &self,
         records: &[DataRecord],
         cache: &mut FieldQueryCache,
     ) -> Vec<DataRecord> {
-        records
-            .iter()
-            .map(|record| self.transform_ref(record, cache))
-            .collect()
+        let mut out = Vec::with_capacity(records.len());
+        for record in records {
+            out.push(self.transform_ref_async(record, cache).await);
+        }
+        out
     }
 }

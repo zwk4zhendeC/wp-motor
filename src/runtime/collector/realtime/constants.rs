@@ -12,6 +12,11 @@ pub(crate) const PICKER_EVENT_CNT_OF_BATCH: usize = 100;
 /// Default pending queue capacity for `ActPicker`.
 pub(crate) const PICKER_PENDING_CAPACITY: usize = 64;
 
+/// Soft byte budget for picker pending backlog.
+/// Once pending bytes reach this watermark, picker stops pulling more source batches
+/// and waits for parser-side draining to catch up.
+pub(crate) const PICKER_PENDING_MAX_BYTES: usize = 8 * 1024 * 1024;
+
 /// Maximum burst size (pending batches processed per round) for `ActPicker`.
 pub(crate) const PICKER_BURST_MAX: usize = 16;
 

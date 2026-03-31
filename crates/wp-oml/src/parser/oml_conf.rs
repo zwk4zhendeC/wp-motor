@@ -1,5 +1,5 @@
+use crate::core::AsyncExpEvaluator;
 use crate::core::DataRecordRef;
-use crate::core::ExpEvaluator;
 use crate::language::{EvalExp, ObjModel, PreciseEvaluator};
 use crate::parser::error::OMLCodeErrorTait;
 use crate::parser::keyword::{kw_head_sep_line, kw_oml_enable, kw_oml_name, kw_static};
@@ -23,17 +23,42 @@ use wpl::parser::utils::peek_str;
 
 use super::keyword::kw_oml_rule;
 
-pub fn oml_parse_raw(data: &mut &str) -> WResult<ObjModel> {
+#[cfg(test)]
+pub(crate) fn oml_parse_syntax_raw(data: &mut &str) -> WResult<ObjModel> {
     oml_conf_code.parse_next(data)
 }
-pub fn oml_parse(data: &mut &str, tag: &str) -> OMLCodeResult<ObjModel> {
-    match oml_conf_code.parse_next(data) {
+
+pub async fn oml_parse_raw(data: &mut &str) -> WResult<ObjModel> {
+    let mut model = oml_conf_code.parse_next(data)?;
+    let static_items = std::mem::take(&mut model.static_items);
+    finalize_static_blocks(&mut model, static_items).await?;
+    Ok(model)
+}
+
+pub async fn oml_parse(data: &mut &str, tag: &str) -> OMLCodeResult<ObjModel> {
+    match oml_parse_raw(data).await {
         Ok(o) => Ok(o),
         Err(e) => Err(OMLCodeError::from_syntax(e, data, tag)),
     }
 }
 
+struct StaticSymbolGuard;
+
+impl StaticSymbolGuard {
+    fn new() -> Self {
+        clear_symbols();
+        Self
+    }
+}
+
+impl Drop for StaticSymbolGuard {
+    fn drop(&mut self) {
+        clear_symbols();
+    }
+}
+
 pub fn oml_conf_code(data: &mut &str) -> WResult<ObjModel> {
+    let _static_symbol_guard = StaticSymbolGuard::new();
     let name = oml_conf_head.parse_next(data)?;
     debug_rule!("obj model: {} begin ", name);
     let mut a_items = ObjModel::new(name);
@@ -70,9 +95,7 @@ pub fn oml_conf_code(data: &mut &str) -> WResult<ObjModel> {
     debug_rule!("obj model: aggregate item  loaded!");
     //repeat(1.., terminated(oml_aggregate, symbol_semicolon)).parse_next(data)?;
     a_items.items.append(&mut items);
-    clear_symbols();
-
-    finalize_static_blocks(&mut a_items, static_items)?;
+    a_items.static_items = static_items;
 
     // Check if any field name starts with "__" (temporary field marker)
     let has_temp = check_temp_fields(&a_items.items);
@@ -145,7 +168,9 @@ fn parse_static_blocks(data: &mut &str) -> WResult<Vec<EvalExp>> {
             if block_data.is_empty() {
                 break;
             }
+            install_symbols(symbols.clone());
             let exp = oml_aggregate.parse_next(&mut block_data)?;
+            ensure_static_block_expr_supported(&exp)?;
             let sym_name = extract_static_target(&exp)?;
             if !symbol_set.insert(sym_name.clone()) {
                 let mut err = ContextError::new();
@@ -167,6 +192,88 @@ fn parse_static_blocks(data: &mut &str) -> WResult<Vec<EvalExp>> {
     Ok(static_items)
 }
 
+fn ensure_static_block_expr_supported(exp: &EvalExp) -> Result<(), ErrMode<ContextError>> {
+    match exp {
+        EvalExp::Single(single) => ensure_static_precise_supported(single.eval_way()),
+        EvalExp::Batch(_) => static_block_err("static block only supports single expressions"),
+    }
+}
+
+fn static_block_err(reason: &'static str) -> Result<(), ErrMode<ContextError>> {
+    let mut err = ContextError::new();
+    err.push(StrContext::Label("static block"));
+    err.push(StrContext::Label(reason));
+    Err(ErrMode::Cut(err))
+}
+
+fn ensure_static_precise_supported(eval: &PreciseEvaluator) -> Result<(), ErrMode<ContextError>> {
+    match eval {
+        PreciseEvaluator::StaticSymbol(_) => {
+            static_block_err("static block does not support referencing other static symbols")
+        }
+        PreciseEvaluator::Obj(_) | PreciseEvaluator::ObjArc(_) | PreciseEvaluator::Val(_) => Ok(()),
+        PreciseEvaluator::Calc(op) => ensure_static_calc_expr_supported(op.expr()),
+        PreciseEvaluator::Map(op) => {
+            for binding in op.subs() {
+                ensure_static_nested_accessor_supported(binding.acquirer())?;
+            }
+            Ok(())
+        }
+        PreciseEvaluator::Sql(_) => {
+            static_block_err("static block does not support SQL queries or external effects")
+        }
+        PreciseEvaluator::Tdc(_) | PreciseEvaluator::Pipe(_) | PreciseEvaluator::Collect(_) => {
+            static_block_err("static block does not support read/take-based runtime access")
+        }
+        PreciseEvaluator::Fun(_) => {
+            static_block_err("static block does not support runtime functions")
+        }
+        PreciseEvaluator::Fmt(_) => {
+            static_block_err("static block does not support runtime formatting access")
+        }
+        PreciseEvaluator::Match(_) | PreciseEvaluator::Lookup(_) => {
+            static_block_err("static block only supports pure literal/object expressions")
+        }
+    }
+}
+
+fn ensure_static_calc_expr_supported(
+    expr: &crate::language::CalcExpr,
+) -> Result<(), ErrMode<ContextError>> {
+    match expr {
+        crate::language::CalcExpr::Const(_) => Ok(()),
+        crate::language::CalcExpr::Accessor(_) => {
+            static_block_err("static block does not support read/take access inside calc")
+        }
+        crate::language::CalcExpr::UnaryNeg(inner) => ensure_static_calc_expr_supported(inner),
+        crate::language::CalcExpr::Binary { lhs, rhs, .. } => {
+            ensure_static_calc_expr_supported(lhs)?;
+            ensure_static_calc_expr_supported(rhs)
+        }
+        crate::language::CalcExpr::Func { arg, .. } => ensure_static_calc_expr_supported(arg),
+    }
+}
+
+fn ensure_static_nested_accessor_supported(
+    accessor: &crate::language::NestedAccessor,
+) -> Result<(), ErrMode<ContextError>> {
+    match accessor {
+        crate::language::NestedAccessor::Field(_)
+        | crate::language::NestedAccessor::FieldArc(_) => Ok(()),
+        crate::language::NestedAccessor::StaticSymbol(_) => {
+            static_block_err("static block does not support referencing other static symbols")
+        }
+        crate::language::NestedAccessor::Direct(_)
+        | crate::language::NestedAccessor::Collect(_) => {
+            static_block_err("static block does not support read/take-based runtime access")
+        }
+        crate::language::NestedAccessor::Fun(_) => {
+            static_block_err("static block does not support runtime functions")
+        }
+    }
+}
+
+#[allow(dead_code)]
 fn extract_static_target(exp: &EvalExp) -> Result<String, ErrMode<ContextError>> {
     match exp {
         EvalExp::Single(single) => {
@@ -192,7 +299,7 @@ fn extract_static_target(exp: &EvalExp) -> Result<String, ErrMode<ContextError>>
     }
 }
 
-fn finalize_static_blocks(
+async fn finalize_static_blocks(
     model: &mut ObjModel,
     static_items: Vec<EvalExp>,
 ) -> Result<(), ErrMode<ContextError>> {
@@ -201,13 +308,13 @@ fn finalize_static_blocks(
         return Ok(());
     }
 
-    let const_fields = materialize_static_items(&static_items)?;
+    let const_fields = materialize_static_items(&static_items).await?;
     rewrite_static_references(model, &const_fields)?;
     model.set_static_fields(const_fields);
     Ok(())
 }
 
-fn materialize_static_items(
+async fn materialize_static_items(
     items: &[EvalExp],
 ) -> Result<HashMap<String, Arc<DataField>>, ErrMode<ContextError>> {
     let mut cache = FieldQueryCache::default();
@@ -216,7 +323,8 @@ fn materialize_static_items(
 
     for exp in items {
         let mut src_ref = DataRecordRef::from(&src);
-        exp.eval_proc(&mut src_ref, &mut dst, &mut cache);
+        exp.eval_proc_async(&mut src_ref, &mut dst, &mut cache)
+            .await;
     }
 
     let mut const_map = HashMap::new();
@@ -254,14 +362,41 @@ fn rewrite_precise_evaluator(
             *eval = PreciseEvaluator::ObjArc(Arc::clone(field));
             Ok(())
         }
+        PreciseEvaluator::Calc(op) => rewrite_calc_operation(op, const_fields),
         PreciseEvaluator::Match(op) => rewrite_match_operation(op, const_fields),
         PreciseEvaluator::Lookup(op) => rewrite_lookup_operation(op, const_fields),
         PreciseEvaluator::Pipe(pipe) => rewrite_pipe_operation(pipe, const_fields),
         PreciseEvaluator::Fun(fun) => rewrite_fun_operation(fun, const_fields),
         PreciseEvaluator::Map(map) => rewrite_map_operation(map, const_fields),
+        PreciseEvaluator::Fmt(op) => rewrite_fmt_operation(op, const_fields),
         PreciseEvaluator::Tdc(op) => rewrite_record_operation(op, const_fields),
         PreciseEvaluator::Collect(arr) => rewrite_arr_operation(arr, const_fields),
         _ => Ok(()),
+    }
+}
+
+fn rewrite_calc_operation(
+    op: &mut crate::language::CalcOperation,
+    const_fields: &HashMap<String, Arc<DataField>>,
+) -> Result<(), ErrMode<ContextError>> {
+    rewrite_calc_expr(op.expr_mut(), const_fields)
+}
+
+fn rewrite_calc_expr(
+    expr: &mut crate::language::CalcExpr,
+    const_fields: &HashMap<String, Arc<DataField>>,
+) -> Result<(), ErrMode<ContextError>> {
+    use crate::language::CalcExpr;
+
+    match expr {
+        CalcExpr::Const(_) => Ok(()),
+        CalcExpr::Accessor(accessor) => rewrite_direct_accessor(accessor, const_fields),
+        CalcExpr::UnaryNeg(inner) => rewrite_calc_expr(inner.as_mut(), const_fields),
+        CalcExpr::Binary { lhs, rhs, .. } => {
+            rewrite_calc_expr(lhs.as_mut(), const_fields)?;
+            rewrite_calc_expr(rhs.as_mut(), const_fields)
+        }
+        CalcExpr::Func { arg, .. } => rewrite_calc_expr(arg.as_mut(), const_fields),
     }
 }
 
@@ -311,6 +446,7 @@ fn rewrite_record_operation(
     op: &mut crate::language::RecordOperation,
     const_fields: &HashMap<String, Arc<DataField>>,
 ) -> Result<(), ErrMode<ContextError>> {
+    rewrite_direct_accessor(op.dat_get_mut(), const_fields)?;
     if let Some(default) = op.default_val_mut() {
         rewrite_generic_accessor(default.accessor_mut(), const_fields)?;
     }
@@ -318,17 +454,17 @@ fn rewrite_record_operation(
 }
 
 fn rewrite_arr_operation(
-    _arr: &mut crate::language::ArrOperation,
-    _const_fields: &HashMap<String, Arc<DataField>>,
+    arr: &mut crate::language::ArrOperation,
+    const_fields: &HashMap<String, Arc<DataField>>,
 ) -> Result<(), ErrMode<ContextError>> {
-    Ok(())
+    rewrite_direct_accessor(&mut arr.dat_crate, const_fields)
 }
 
 fn rewrite_pipe_operation(
-    _op: &mut crate::language::PiPeOperation,
-    _const_fields: &HashMap<String, Arc<DataField>>,
+    op: &mut crate::language::PiPeOperation,
+    const_fields: &HashMap<String, Arc<DataField>>,
 ) -> Result<(), ErrMode<ContextError>> {
-    Ok(())
+    rewrite_direct_accessor(op.from_mut(), const_fields)
 }
 
 fn rewrite_fun_operation(
@@ -338,10 +474,22 @@ fn rewrite_fun_operation(
     Ok(())
 }
 
+fn rewrite_fmt_operation(
+    op: &mut crate::language::FmtOperation,
+    const_fields: &HashMap<String, Arc<DataField>>,
+) -> Result<(), ErrMode<ContextError>> {
+    for sub in op.subs_mut() {
+        rewrite_record_operation(sub, const_fields)?;
+    }
+    Ok(())
+}
+
 fn rewrite_match_operation(
     op: &mut crate::language::MatchOperation,
     const_fields: &HashMap<String, Arc<DataField>>,
 ) -> Result<(), ErrMode<ContextError>> {
+    rewrite_match_source(op.dat_crate_mut(), const_fields)?;
+
     // Rewrite result part (already exists)
     for case in op.items_mut() {
         rewrite_nested_accessor(case.result_mut(), const_fields)?;
@@ -355,6 +503,42 @@ fn rewrite_match_operation(
         rewrite_match_condition(case.condition_mut(), const_fields)?;
     }
 
+    Ok(())
+}
+
+fn rewrite_match_source(
+    source: &mut crate::language::MatchSource,
+    const_fields: &HashMap<String, Arc<DataField>>,
+) -> Result<(), ErrMode<ContextError>> {
+    match source {
+        crate::language::MatchSource::Single(accessor) => {
+            rewrite_direct_accessor(accessor, const_fields)
+        }
+        crate::language::MatchSource::Multi(accessors) => {
+            for accessor in accessors.iter_mut() {
+                rewrite_direct_accessor(accessor, const_fields)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn rewrite_direct_accessor(
+    accessor: &mut crate::language::DirectAccessor,
+    const_fields: &HashMap<String, Arc<DataField>>,
+) -> Result<(), ErrMode<ContextError>> {
+    match accessor {
+        crate::language::DirectAccessor::Take(take) => {
+            if let Some(default) = take.default_acq.as_mut() {
+                rewrite_generic_accessor(default, const_fields)?;
+            }
+        }
+        crate::language::DirectAccessor::Read(read) => {
+            if let Some(default) = read.default_acq.as_mut() {
+                rewrite_generic_accessor(default, const_fields)?;
+            }
+        }
+    }
     Ok(())
 }
 
@@ -435,15 +619,25 @@ fn rewrite_nested_accessor(
     accessor: &mut crate::language::NestedAccessor,
     const_fields: &HashMap<String, Arc<DataField>>,
 ) -> Result<(), ErrMode<ContextError>> {
-    if let Some(sym) = accessor.as_static_symbol() {
-        let field = const_fields.get(sym).ok_or_else(|| {
-            let mut err = ContextError::new();
-            err.push(StrContext::Label("static reference"));
-            err.push(StrContext::Label("symbol not found"));
-            ErrMode::Cut(err)
-        })?;
-        // Use Arc::clone instead of DataField clone for zero-copy sharing
-        accessor.replace_with_field_arc(Arc::clone(field));
+    match accessor {
+        crate::language::NestedAccessor::StaticSymbol(sym) => {
+            let field = const_fields.get(sym).ok_or_else(|| {
+                let mut err = ContextError::new();
+                err.push(StrContext::Label("static reference"));
+                err.push(StrContext::Label("symbol not found"));
+                ErrMode::Cut(err)
+            })?;
+            accessor.replace_with_field_arc(Arc::clone(field));
+        }
+        crate::language::NestedAccessor::Direct(op) => {
+            rewrite_record_operation(op, const_fields)?;
+        }
+        crate::language::NestedAccessor::Collect(arr) => {
+            rewrite_arr_operation(arr, const_fields)?;
+        }
+        crate::language::NestedAccessor::Field(_)
+        | crate::language::NestedAccessor::FieldArc(_)
+        | crate::language::NestedAccessor::Fun(_) => {}
     }
     Ok(())
 }
@@ -452,15 +646,19 @@ fn rewrite_generic_accessor(
     accessor: &mut crate::language::GenericAccessor,
     const_fields: &HashMap<String, Arc<DataField>>,
 ) -> Result<(), ErrMode<ContextError>> {
-    if let Some(sym) = accessor.as_static_symbol() {
-        let field = const_fields.get(sym).ok_or_else(|| {
-            let mut err = ContextError::new();
-            err.push(StrContext::Label("static reference"));
-            err.push(StrContext::Label("symbol not found"));
-            ErrMode::Cut(err)
-        })?;
-        // Use Arc::clone instead of DataField clone for zero-copy sharing
-        accessor.replace_with_field_arc(Arc::clone(field));
+    match accessor {
+        crate::language::GenericAccessor::StaticSymbol(sym) => {
+            let field = const_fields.get(sym).ok_or_else(|| {
+                let mut err = ContextError::new();
+                err.push(StrContext::Label("static reference"));
+                err.push(StrContext::Label("symbol not found"));
+                ErrMode::Cut(err)
+            })?;
+            accessor.replace_with_field_arc(Arc::clone(field));
+        }
+        crate::language::GenericAccessor::Field(_)
+        | crate::language::GenericAccessor::FieldArc(_)
+        | crate::language::GenericAccessor::Fun(_) => {}
     }
     Ok(())
 }
@@ -523,14 +721,15 @@ pub fn oml_conf_enable(data: &mut &str) -> WResult<bool> {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::oml_conf::oml_parse_raw;
+    use crate::core::AsyncDataTransformer;
+    use crate::parser::oml_conf::{oml_parse_raw, oml_parse_syntax_raw};
     use crate::parser::utils::for_test::{assert_oml_parse, assert_oml_parse_ext};
     use wp_primitives::Parser;
     use wp_primitives::WResult as ModalResult;
     use wp_primitives::comment::CommentParser;
 
-    #[test]
-    fn test_conf_sample() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_conf_sample() -> ModalResult<()> {
         let mut code = r#"
 name : test
 rule :
@@ -544,7 +743,7 @@ src_ip       :auto   = take();
 update_time  :time    = take() { _ :  time(2020-10-01 12:30:30) };
 
         "#;
-        assert_oml_parse(&mut code, oml_parse_raw);
+        assert_oml_parse(&mut code, oml_parse_syntax_raw);
         let mut code = r#"
 name : test
 rule :
@@ -555,36 +754,36 @@ pos_sn       :chars   = take() ;
 aler*        : auto   = take() ;
 update_time  :time    = take() { _ :  time(2020-10-01 12:30:30) };
         "#;
-        assert_oml_parse(&mut code, oml_parse_raw);
+        assert_oml_parse(&mut code, oml_parse_syntax_raw);
         Ok(())
     }
 
-    #[test]
-    fn test_conf_fun() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_conf_fun() -> ModalResult<()> {
         let mut code = r#"
 name : test
 ---
 version      : chars   = Now::time() ;
 version      : chars   = Now::time() ;
         "#;
-        assert_oml_parse(&mut code, oml_parse_raw);
+        assert_oml_parse(&mut code, oml_parse_syntax_raw);
         Ok(())
     }
 
-    #[test]
-    fn test_conf_pipe() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_conf_pipe() -> ModalResult<()> {
         let mut code = r#"
 name : test
 ---
 version      : chars   = pipe take() | base64_encode  ;
 version      : chars   = pipe take(ip) | to_str |  base64_encode ;
         "#;
-        assert_oml_parse(&mut code, oml_parse_raw);
+        assert_oml_parse(&mut code, oml_parse_syntax_raw);
         Ok(())
     }
 
-    #[test]
-    fn test_conf_pipe_optional_keyword() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_conf_pipe_optional_keyword() -> ModalResult<()> {
         use orion_error::TestAssert;
 
         // Test pipe without 'pipe' keyword - should parse successfully
@@ -594,7 +793,7 @@ name : test
 url_secure = take(url) | starts_with('https://') | map_to(true) ;
 encoded = read(data) | base64_encode ;
         "#;
-        let model = oml_parse_raw(&mut code).assert();
+        let model = oml_parse_raw(&mut code).await.assert();
         assert_eq!(model.name(), "test");
         assert_eq!(model.items.len(), 2);
 
@@ -605,15 +804,15 @@ name : test
 version1 = pipe take(ip) | to_str | base64_encode ;
 version2 = take(ip) | to_str | base64_encode ;
         "#;
-        let model = oml_parse_raw(&mut code).assert();
+        let model = oml_parse_raw(&mut code).await.assert();
         assert_eq!(model.name(), "test");
         assert_eq!(model.items.len(), 2);
 
         Ok(())
     }
 
-    #[test]
-    fn test_static_block_parsing() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_static_block_parsing() -> ModalResult<()> {
         use crate::language::{EvalExp, PreciseEvaluator};
 
         let mut code = r#"
@@ -628,7 +827,7 @@ static {
 target_template = template;
         "#;
 
-        let model = oml_parse_raw(&mut code)?;
+        let model = oml_parse_raw(&mut code).await?;
         assert_eq!(model.static_fields().len(), 1);
         assert_eq!(model.items.len(), 1);
         match &model.items[0] {
@@ -643,8 +842,8 @@ target_template = template;
         Ok(())
     }
 
-    #[test]
-    fn test_static_in_map_binding() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_static_in_map_binding() -> ModalResult<()> {
         use crate::language::{EvalExp, NestedAccessor, PreciseEvaluator};
 
         let mut code = r#"
@@ -662,7 +861,7 @@ result = object {
 };
         "#;
 
-        let model = oml_parse_raw(&mut code)?;
+        let model = oml_parse_raw(&mut code).await?;
         assert_eq!(model.static_fields().len(), 1);
         match &model.items[0] {
             EvalExp::Single(single) => match single.eval_way() {
@@ -681,8 +880,8 @@ result = object {
         Ok(())
     }
 
-    #[test]
-    fn test_static_in_default_binding() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_static_in_default_binding() -> ModalResult<()> {
         use crate::language::{EvalExp, GenericAccessor, PreciseEvaluator};
 
         let mut code = r#"
@@ -698,7 +897,7 @@ static {
 value = take(Value) { _ : fallback };
         "#;
 
-        let model = oml_parse_raw(&mut code)?;
+        let model = oml_parse_raw(&mut code).await?;
         assert_eq!(model.static_fields().len(), 1);
         match &model.items[0] {
             EvalExp::Single(single) => match single.eval_way() {
@@ -718,8 +917,49 @@ value = take(Value) { _ : fallback };
         Ok(())
     }
 
-    #[test]
-    fn test_static_in_match_cases() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_static_in_nested_default_binding() -> ModalResult<()> {
+        use crate::language::{EvalExp, GenericAccessor, NestedAccessor, PreciseEvaluator};
+
+        let mut code = r#"
+name : test
+---
+static {
+    fallback = object {
+        id = chars(E1);
+    };
+}
+
+payload = object {
+    value = take(Value) { _ : fallback };
+};
+        "#;
+
+        let model = oml_parse_raw(&mut code).await?;
+        assert_eq!(model.static_fields().len(), 1);
+        match &model.items[0] {
+            EvalExp::Single(single) => match single.eval_way() {
+                PreciseEvaluator::Map(op) => match op.subs()[0].acquirer() {
+                    NestedAccessor::Direct(record) => {
+                        let default = record.default_val().as_ref().expect("default binding");
+                        match default.accessor() {
+                            GenericAccessor::FieldArc(field) => {
+                                assert_eq!(field.get_name(), "fallback");
+                            }
+                            other => panic!("expected field arc accessor, got {:?}", other),
+                        }
+                    }
+                    other => panic!("expected direct accessor, got {:?}", other),
+                },
+                other => panic!("unexpected evaluator: {:?}", other),
+            },
+            _ => panic!("expected single evaluator"),
+        }
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_static_in_match_cases() -> ModalResult<()> {
         use crate::language::{EvalExp, NestedAccessor, PreciseEvaluator};
 
         let mut code = r#"
@@ -738,7 +978,7 @@ target = match read(Content) {
 };
         "#;
 
-        let model = oml_parse_raw(&mut code)?;
+        let model = oml_parse_raw(&mut code).await?;
         assert_eq!(model.static_fields().len(), 1);
         match &model.items[0] {
             EvalExp::Single(single) => match single.eval_way() {
@@ -769,8 +1009,8 @@ target = match read(Content) {
         Ok(())
     }
 
-    #[test]
-    fn test_lookup_nocase_requires_static_object() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_lookup_nocase_requires_static_object() {
         let mut code = r#"
 name : test
 ---
@@ -781,21 +1021,106 @@ static {
 risk_score : float = lookup_nocase(score, read(status), 40.0);
         "#;
 
-        assert!(oml_parse_raw(&mut code).is_err());
+        assert!(oml_parse_raw(&mut code).await.is_err());
     }
-    #[test]
-    fn test_conf_fmt() -> ModalResult<()> {
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_static_block_rejects_static_symbol_reference() {
+        let mut code = r#"
+name : test
+---
+static {
+    fallback = chars(foo);
+    value = fallback;
+}
+
+result = read(value);
+        "#;
+
+        let err = oml_parse_raw(&mut code)
+            .await
+            .expect_err("static-in-static should fail");
+        let msg = err.to_string();
+        assert!(msg.contains("static block"));
+        assert!(msg.contains("does not support referencing other static symbols"));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_static_block_rejects_runtime_read_accessor() {
+        let mut code = r#"
+name : test
+---
+static {
+    fallback = chars(foo);
+    value = read(input) { _ : fallback };
+}
+
+result = read(value);
+        "#;
+
+        let err = oml_parse_raw(&mut code)
+            .await
+            .expect_err("runtime accessor in static block should fail");
+        let msg = err.to_string();
+        assert!(msg.contains("static block"));
+        assert!(msg.contains("read/take-based runtime access"));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_static_block_rejects_sql_effect() {
+        let mut code = r#"
+name : test
+---
+static {
+    value = select name from some_table where id = 1;
+}
+
+result = read(value);
+        "#;
+
+        let err = oml_parse_raw(&mut code)
+            .await
+            .expect_err("sql in static block should fail");
+        let msg = err.to_string();
+        assert!(msg.contains("static block"));
+        assert!(msg.contains("SQL queries or external effects"));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_static_symbol_ctx_cleared_after_parse_failure() {
+        let mut bad = r#"
+name : bad
+---
+static {
+    fallback = chars(foo);
+    value = read(input) { _ : fallback };
+}
+
+result = read(value);
+        "#;
+        assert!(oml_parse_raw(&mut bad).await.is_err());
+
+        let mut next = r#"
+name : next
+---
+value = fallback;
+        "#;
+        assert!(oml_parse_raw(&mut next).await.is_err());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_conf_fmt() -> ModalResult<()> {
         let mut code = r#"
 name : test
 ---
 version      :chars   = fmt("_{}*{}",@ip,@sys)  ;
         "#;
-        oml_parse_raw.parse_next(&mut code)?;
+        oml_parse_syntax_raw.parse_next(&mut code)?;
         //assert_oml_parse(&mut code, oml_conf);
         Ok(())
     }
-    #[test]
-    fn test_conf2() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_conf2() -> ModalResult<()> {
         let mut code = r#"
 name : test
 ---
@@ -805,13 +1130,13 @@ values : obj = object {
 };
 citys : array = collect take( keys : [ a,b,c* ] ) ;
         "#;
-        let model = oml_parse_raw.parse_next(&mut code)?;
+        let model = oml_parse_syntax_raw.parse_next(&mut code)?;
         assert_eq!(model.items.len(), 2);
         println!("{}", model);
         Ok(())
     }
-    #[test]
-    fn test_conf3() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_conf3() -> ModalResult<()> {
         let mut code = r#"
 name : test
 ---
@@ -825,14 +1150,14 @@ values : obj = object {
     process,disk_free, disk_used ,disk_used_by_fifty_min, disk_used_by_one_min    : digit  = take() ;
 };
         "#;
-        let model = oml_parse_raw.parse_next(&mut code)?;
+        let model = oml_parse_syntax_raw.parse_next(&mut code)?;
         assert_eq!(model.items.len(), 2);
         println!("{}", model);
         Ok(())
     }
 
-    #[test]
-    fn test_conf4() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_conf4() -> ModalResult<()> {
         let mut code = r#"
 name : test
 ---
@@ -847,13 +1172,13 @@ values  = object {
     process,disk_free, disk_used ,disk_used_by_fifty_min, disk_used_by_one_min    : digit  = take() ;
 };
 "#;
-        let model = oml_parse_raw.parse_next(&mut code)?;
+        let model = oml_parse_syntax_raw.parse_next(&mut code)?;
         assert_eq!(model.items.len(), 2);
         println!("{}", model);
         Ok(())
     }
-    #[test]
-    fn test_conf_comment() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_conf_comment() -> ModalResult<()> {
         let mut raw_code = r#"
 name : test
 ---
@@ -873,12 +1198,12 @@ update_time  : auto = take () { _ :  time(2020-10-01 12:30:30) };
 
         let code = CommentParser::ignore_comment(&mut raw_code)?;
         let mut pure_code = code.as_str();
-        assert_oml_parse_ext(&mut pure_code, oml_parse_raw, expect);
+        assert_oml_parse_ext(&mut pure_code, oml_parse_syntax_raw, expect);
         Ok(())
     }
 
-    #[test]
-    fn test_conf_quoted_chars() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_conf_quoted_chars() -> ModalResult<()> {
         use orion_error::TestAssert;
 
         // Test that chars() supports both quoted and unquoted strings
@@ -889,7 +1214,7 @@ msg1 = chars('hello world');
 msg2 = chars("goodbye");
 msg3 = chars(unquoted);
         "#;
-        let model = oml_parse_raw(&mut code1).assert();
+        let model = oml_parse_raw(&mut code1).await.assert();
         assert_eq!(model.name(), "test");
 
         // Test with special characters
@@ -898,15 +1223,14 @@ name : test
 ---
 msg = chars('hello\nworld');
         "#;
-        let model2 = oml_parse_raw(&mut code2).assert();
+        let model2 = oml_parse_raw(&mut code2).await.assert();
         assert_eq!(model2.name(), "test");
 
         Ok(())
     }
 
-    #[test]
-    fn test_temp_field_filter() -> ModalResult<()> {
-        use crate::core::DataTransformer;
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_temp_field_filter() -> ModalResult<()> {
         use orion_error::TestAssert;
         use wp_knowledge::cache::FieldQueryCache;
         use wp_model_core::model::{DataRecord, DataType};
@@ -919,13 +1243,13 @@ __temp = chars(temporary);
 result = chars(final);
 __another_temp = chars(also_temp);
         "#;
-        let model = oml_parse_raw(&mut code).assert();
+        let model = oml_parse_raw(&mut code).await.assert();
         assert_eq!(model.name(), "test");
 
         // Transform with empty input
         let cache = &mut FieldQueryCache::default();
         let input = DataRecord::default();
-        let output = model.transform(input, cache);
+        let output = model.transform_async(input, cache).await;
 
         // Check that normal fields are preserved
         let result_field = output.field("result");
@@ -959,9 +1283,8 @@ __another_temp = chars(also_temp);
         Ok(())
     }
 
-    #[test]
-    fn test_temp_field_in_computation() -> ModalResult<()> {
-        use crate::core::DataTransformer;
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_temp_field_in_computation() -> ModalResult<()> {
         use orion_error::TestAssert;
         use wp_knowledge::cache::FieldQueryCache;
         use wp_model_core::model::{DataRecord, DataType};
@@ -977,11 +1300,11 @@ result = match read(__temp_type) {
     _ => chars(ok),
 };
         "#;
-        let model = oml_parse_raw(&mut code).assert();
+        let model = oml_parse_raw(&mut code).await.assert();
 
         let cache = &mut FieldQueryCache::default();
         let input = DataRecord::default();
-        let output = model.transform(input, cache);
+        let output = model.transform_async(input, cache).await;
 
         // Debug: print all fields
         println!("Output fields:");
@@ -1010,8 +1333,8 @@ result = match read(__temp_type) {
         Ok(())
     }
 
-    #[test]
-    fn test_temp_field_flag() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_temp_field_flag() -> ModalResult<()> {
         use orion_error::TestAssert;
 
         // Test case 1: Model with no temporary fields
@@ -1021,7 +1344,7 @@ name : test
 normal1 = chars(value1);
 normal2 = chars(value2);
         "#;
-        let model_no_temp = oml_parse_raw(&mut code_no_temp).assert();
+        let model_no_temp = oml_parse_raw(&mut code_no_temp).await.assert();
         assert!(
             !model_no_temp.has_temp_fields(),
             "Should not have temp fields flag"
@@ -1034,7 +1357,7 @@ name : test
 __temp = chars(temp_value);
 normal = chars(normal_value);
         "#;
-        let model_with_temp = oml_parse_raw(&mut code_with_temp).assert();
+        let model_with_temp = oml_parse_raw(&mut code_with_temp).await.assert();
         assert!(
             model_with_temp.has_temp_fields(),
             "Should have temp fields flag"
@@ -1048,7 +1371,7 @@ __temp1 = chars(value1);
 normal = chars(value2);
 __temp2 = chars(value3);
         "#;
-        let model_multi_temp = oml_parse_raw(&mut code_multi_temp).assert();
+        let model_multi_temp = oml_parse_raw(&mut code_multi_temp).await.assert();
         assert!(
             model_multi_temp.has_temp_fields(),
             "Should have temp fields flag"
@@ -1057,8 +1380,8 @@ __temp2 = chars(value3);
         Ok(())
     }
 
-    #[test]
-    fn test_enable_config_default() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_enable_config_default() -> ModalResult<()> {
         use orion_error::TestAssert;
 
         // Test case 1: Default enable (no enable config)
@@ -1067,14 +1390,14 @@ name : test
 ---
 field = chars(value);
         "#;
-        let model_default = oml_parse_raw(&mut code_default).assert();
+        let model_default = oml_parse_raw(&mut code_default).await.assert();
         assert!(*model_default.enable(), "Default enable should be true");
 
         Ok(())
     }
 
-    #[test]
-    fn test_enable_config_true() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_enable_config_true() -> ModalResult<()> {
         use orion_error::TestAssert;
 
         // Test case 2: Explicit enable = true
@@ -1084,14 +1407,14 @@ enable : true
 ---
 field = chars(value);
         "#;
-        let model_enable_true = oml_parse_raw(&mut code_enable_true).assert();
+        let model_enable_true = oml_parse_raw(&mut code_enable_true).await.assert();
         assert!(*model_enable_true.enable(), "Explicit enable true");
 
         Ok(())
     }
 
-    #[test]
-    fn test_enable_config_false() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_enable_config_false() -> ModalResult<()> {
         use orion_error::TestAssert;
 
         // Test case 3: Explicit enable = false
@@ -1101,14 +1424,14 @@ enable : false
 ---
 field = chars(value);
         "#;
-        let model_enable_false = oml_parse_raw(&mut code_enable_false).assert();
+        let model_enable_false = oml_parse_raw(&mut code_enable_false).await.assert();
         assert!(!*model_enable_false.enable(), "Explicit enable false");
 
         Ok(())
     }
 
-    #[test]
-    fn test_enable_config_with_rule() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_enable_config_with_rule() -> ModalResult<()> {
         use orion_error::TestAssert;
 
         // Test case 4: enable with rule
@@ -1119,14 +1442,14 @@ enable : false
 ---
 field = chars(value);
         "#;
-        let model_with_rule = oml_parse_raw(&mut code_with_rule).assert();
+        let model_with_rule = oml_parse_raw(&mut code_with_rule).await.assert();
         assert!(!*model_with_rule.enable(), "enable with rule");
 
         Ok(())
     }
 
-    #[test]
-    fn test_enable_explicit() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_enable_explicit() -> ModalResult<()> {
         use crate::parser::oml_conf::oml_conf_enable;
 
         // Test parsing enable directly

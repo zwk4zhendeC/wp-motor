@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.11] - 2026-03-29
+
+### Added
+- **Knowledge/Stats**: Bridge `wp-knowledge` runtime telemetry into `wp-stats`, exposing knowledge DB reload/cache/query counters and query-latency bucket stats through the existing monitor pipeline
+
+### Changed
+- **Dependencies/Knowledge**: Align workspace consumers, including `wp-proj`, to the local path `wp-knowledge` dependency so runtime telemetry uses one shared crate instance across `wp-motor`
+- **OML/Async**: Make OML model loading use async file reads, run async transform paths through the async evaluator consistently, and remove unused internal sync evaluator skeletons from the production path
+- **Runtime/Backpressure**: Lower the default parser and sink channel capacities to `128` and `64` so backpressure is applied earlier and peak in-process buffering stays lower under sustained input load
+
+### Fixed
+- **Realtime/Pending**: Bound realtime picker backlog by bytes so source fetch pauses once pending payload volume reaches the configured watermark instead of continuing to accumulate parser-side memory
+- **TCP/Memory**: Upgrade runtime source connectors to `wp-core-connectors 0.1.3`, bringing TCP reader-side pending-byte backpressure and lower default reader batch queue sizing to reduce memory growth under high EPS input
+- **OML/Static**: Reject `static { ... }` blocks that reference other static symbols during parsing instead of leaving them as runtime failures
+- **OML/Diagnostics**: Make `oml-diag` collection task-aware under async execution so diagnostic reset/push/take stay aligned with the same transform request
+
 ## [1.19.9] - 2026-03-24
 
 ### Fixed

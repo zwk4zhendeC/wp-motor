@@ -96,14 +96,14 @@ impl ValueProcessor for TimeToTsZone {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::DataTransformer;
+    use crate::core::AsyncDataTransformer;
     use crate::parser::oml_parse_raw;
     use orion_error::TestAssert;
     use wp_knowledge::cache::FieldQueryCache;
     use wp_model_core::model::{DataField, DataRecord, FieldStorage};
 
-    #[test]
-    fn test_pipe_time() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_pipe_time() {
         let cache = &mut FieldQueryCache::default();
         let data = vec![FieldStorage::from_owned(DataField::from_chars(
             "A1", "<html>",
@@ -118,8 +118,8 @@ mod tests {
         Z  =  pipe  read(Y) | Time::to_ts_ms ;
         U  =  pipe  read(Y) | Time::to_ts_us ;
          "#;
-        let model = oml_parse_raw(&mut conf).assert();
-        let target = model.transform(src, cache);
+        let model = oml_parse_raw(&mut conf).await.assert();
+        let target = model.transform_async(src, cache).await;
         //let expect = TDOEnum::from_digit("X".to_string(), 971136000);
         let expect = DataField::from_digit("X".to_string(), 971107200);
         assert_eq!(target.field("X").map(|s| s.as_field()), Some(&expect));

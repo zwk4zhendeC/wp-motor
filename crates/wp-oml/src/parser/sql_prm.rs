@@ -260,8 +260,8 @@ mod tests {
     use crate::parser::{sql_prm::oml_sql, utils::for_test::err_of_oml};
     use winnow::Parser;
 
-    #[test]
-    fn test_oml_sql() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_oml_sql() -> ModalResult<()> {
         super::set_sql_strict_for_test(Some(true));
         let mut code = r#" select a, b from table_1 where x = read (src);"#;
         assert_oml_parse(&mut code, oml_sql);
@@ -283,8 +283,8 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_oml_sql2() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_oml_sql2() -> ModalResult<()> {
         super::set_sql_strict_for_test(Some(true));
         let mut code = r#" select a, b from table_1 where x = Now::time() and y = read(src) ;"#;
         assert_oml_parse(&mut code, oml_sql);
@@ -292,8 +292,8 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_oml_sql_strict_err() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_oml_sql_strict_err() {
         super::set_sql_strict_for_test(Some(true));
         let code = r#" select a, b from table-1 where x = read(src) ;"#;
         let err = oml_sql.parse(code).unwrap_err();
@@ -303,8 +303,8 @@ mod tests {
         super::set_sql_strict_for_test(None);
     }
 
-    #[test]
-    fn test_oml_sql_compat_ok() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_oml_sql_compat_ok() -> ModalResult<()> {
         // 双保险：覆盖为兼容模式，且写入 env 变量
         super::set_sql_strict_for_test(Some(false));
         unsafe {
@@ -319,13 +319,13 @@ mod tests {
         Ok(())
     }
 
-    use crate::core::DataTransformer;
+    use crate::core::AsyncDataTransformer;
     use crate::parser::oml_parse_raw;
     use orion_error::TestAssert;
     use wp_know::mem::memdb::MemDB;
     use wp_knowledge::facade as kdb;
-    #[test]
-    fn test_sql_udf_ip4_between_exec() -> ModalResult<()> {
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_sql_udf_ip4_between_exec() -> ModalResult<()> {
         // 1) init in-memory provider and prepare table with an IPv4 range
         let db = MemDB::global();
         db.table_create(
@@ -345,14 +345,14 @@ name : test
 ---
 zone : chars = select zone from zone where ip_start_int <= ip4_int(read(src_ip)) and ip_end_int >= ip4_int(read(src_ip)) ;
         "#;
-        let model = oml_parse_raw(&mut conf).assert();
+        let model = oml_parse_raw(&mut conf).await.assert();
 
         // 3) transform with src_ip within range
         let src = DataRecord::from(vec![FieldStorage::from_owned(DataField::from_chars(
             "src_ip", "10.1.2.3",
         ))]);
         let cache = &mut FieldQueryCache::default();
-        let out = model.transform(src, cache);
+        let out = model.transform_async(src, cache).await;
         use wp_model_core::model::Value;
         let zone = out.get2("zone").and_then(|f| match f.get_value() {
             Value::Chars(s) => Some(s.as_str()),
@@ -361,8 +361,85 @@ zone : chars = select zone from zone where ip_start_int <= ip4_int(read(src_ip))
         assert_eq!(zone, Some("A"));
         Ok(())
     }
-    #[test]
-    fn test_sql_oml_err() {
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_sql_udf_ip4_between_exec_async() -> ModalResult<()> {
+        let db = MemDB::global();
+        db.table_create(
+            "CREATE TABLE IF NOT EXISTS zone (zone TEXT, ip_start_int INTEGER, ip_end_int INTEGER)",
+        )
+        .assert();
+        db.execute("DELETE FROM zone").assert();
+        db.execute(
+            "INSERT INTO zone (zone, ip_start_int, ip_end_int) VALUES ('A', 167772160, 184549375)",
+        )
+        .assert();
+        let _ = kdb::init_mem_provider(db);
+
+        let mut conf = r#"
+name : test
+---
+zone : chars = select zone from zone where ip_start_int <= ip4_int(read(src_ip)) and ip_end_int >= ip4_int(read(src_ip)) ;
+        "#;
+        let model = oml_parse_raw(&mut conf).await.assert();
+
+        let src = DataRecord::from(vec![FieldStorage::from_owned(DataField::from_chars(
+            "src_ip", "10.1.2.3",
+        ))]);
+        let cache = &mut FieldQueryCache::default();
+        let out = model.transform_async(src, cache).await;
+        use wp_model_core::model::Value;
+        let zone = out.get2("zone").and_then(|f| match f.get_value() {
+            Value::Chars(s) => Some(s.as_str()),
+            _ => None,
+        });
+        assert_eq!(zone, Some("A"));
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_object_async_uses_nested_accessors() -> ModalResult<()> {
+        let mut conf = r#"
+name : test
+---
+static {
+    tpl = object {
+        zone = chars(A);
+    };
+}
+
+payload = object {
+    clone = tpl;
+    source = read(src_ip);
+};
+        "#;
+        let model = oml_parse_raw(&mut conf).await.assert();
+
+        let src = DataRecord::from(vec![FieldStorage::from_owned(DataField::from_chars(
+            "src_ip", "10.1.2.3",
+        ))]);
+        let cache = &mut FieldQueryCache::default();
+        let out = model.transform_async(src, cache).await;
+        use wp_model_core::model::Value;
+        let payload = out.get2("payload").expect("payload field");
+        let Value::Obj(obj) = payload.get_value() else {
+            panic!("payload should be object");
+        };
+        let clone = obj.get("clone").expect("clone field");
+        let source = obj.get("source").expect("source field");
+        let Value::Obj(clone_obj) = clone.as_field().get_value() else {
+            panic!("clone should be object");
+        };
+        let zone = clone_obj.get("zone").expect("zone field");
+        assert_eq!(zone.as_field().get_value(), &Value::Chars("A".into()));
+        assert_eq!(
+            source.as_field().get_value(),
+            &Value::Chars("10.1.2.3".into())
+        );
+        Ok(())
+    }
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_sql_oml_err() {
         let mut code = r#" selec a, b from table_1 where x = read (src);"#;
         let e = err_of_oml(&mut code, oml_sql);
         println!("err:{}, \nwhere:{}", e, code);

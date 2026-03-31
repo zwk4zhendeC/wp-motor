@@ -28,6 +28,23 @@ pub struct CleanReport {
     pub not_found_models: bool,
 }
 
+fn postgres_provider_example() -> &'static str {
+    r#"
+# PostgreSQL provider example:
+# Uncomment this block to query an external PostgreSQL database instead of
+# loading CSV files into the local authority SQLite.
+#
+# [provider]
+# kind = "postgres"
+# connection_uri = "postgres://demo:${SEC_PWD}@127.0.0.1:5432/demo"
+# pool_size = 8
+#
+# After enabling [provider], OML lookup SQL runs against that PostgreSQL
+# datasource. Keep the local CSV example below if you still want a ready-made
+# sample table in the generated project.
+"#
+}
+
 pub fn init(work_root: &str, full: bool) -> Result<()> {
     #[derive(Serialize)]
     struct KnowdbToml {
@@ -135,7 +152,14 @@ pub fn init(work_root: &str, full: bool) -> Result<()> {
     let wr = PathBuf::from(work_root);
     let models_dir = wr.join("models").join("knowledge");
     fs::create_dir_all(&models_dir)?;
-    let body = toml::to_string_pretty(&spec).unwrap_or_else(|_| "version = 2\n\n[[tables]]\nname = \"example\"\ncolumns.by_header = [\"name\", \"pinying\"]\n".to_string());
+    let mut body = toml::to_string_pretty(&spec).unwrap_or_else(|_| {
+        "version = 2\n\n[[tables]]\nname = \"example\"\ncolumns.by_header = [\"name\", \"pinying\"]\n"
+            .to_string()
+    });
+    if !body.ends_with('\n') {
+        body.push('\n');
+    }
+    body.push_str(postgres_provider_example());
     fs::write(models_dir.join("knowdb.toml"), body)?;
     let ex = models_dir.join("example");
     fs::create_dir_all(&ex)?;
@@ -218,4 +242,26 @@ pub fn clean(work_root: &str) -> Result<CleanReport> {
         rep.removed_authority_cache = true;
     }
     Ok(rep)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn init_writes_postgres_provider_example() {
+        let temp = tempdir().expect("create tempdir");
+        init(temp.path().to_str().expect("temp path"), false).expect("init knowdb");
+
+        let knowdb = fs::read_to_string(temp.path().join("models/knowledge/knowdb.toml"))
+            .expect("read generated knowdb.toml");
+
+        assert!(knowdb.contains("# [provider]"));
+        assert!(knowdb.contains("kind = \"postgres\""));
+        assert!(
+            knowdb.contains("connection_uri = \"postgres://demo:${SEC_PWD}@127.0.0.1:5432/demo\"")
+        );
+        assert!(knowdb.contains("OML lookup SQL runs against that PostgreSQL"));
+    }
 }

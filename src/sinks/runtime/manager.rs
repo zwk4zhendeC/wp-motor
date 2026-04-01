@@ -172,12 +172,7 @@ impl SinkRuntime {
 
     pub async fn send_stat(&mut self, mon_send: &MonSend) -> SinkResult<()> {
         if !self.normal_stat.has_pending_data() {
-            if let Some((group, sink)) = self.name.split_once('/') {
-                // 对 name=group/sink 的场景补齐结构化维度，便于看板聚合。
-                let rec = DataRecord::from(vec![
-                    DataField::from_chars("wp_sink_group", group),
-                    DataField::from_chars("wp_sink_name", sink),
-                ]);
+            if let Some(rec) = self.build_sink_dim_record() {
                 self.normal_stat.touch_task_record(self.name.as_str(), &rec);
             } else {
                 self.normal_stat.touch_task_unit(self.name.as_str());
@@ -191,14 +186,8 @@ impl SinkRuntime {
         if self.backup_used {
             let backup_name = format!("{}_bak", self.name);
             if !self.backup_stat.has_pending_data() {
-                if let Some((group, sink)) = backup_name.split_once('/') {
-                    // backup sink 与主 sink 采用同一维度规则，避免口径不一致。
-                    let rec = DataRecord::from(vec![
-                        DataField::from_chars("wp_sink_group", group),
-                        DataField::from_chars("wp_sink_name", sink),
-                    ]);
-                    self.backup_stat
-                        .touch_task_record(backup_name.as_str(), &rec);
+                if let Some(rec) = self.build_sink_dim_record() {
+                    self.backup_stat.touch_task_record(backup_name.as_str(), &rec);
                 } else {
                     self.backup_stat.touch_task_unit(backup_name.as_str());
                 }
@@ -210,6 +199,24 @@ impl SinkRuntime {
                 .want("back sink stat")?;
         }
         Ok(())
+    }
+
+    fn build_sink_dim_record(&self) -> Option<DataRecord> {
+        let mut fields = Vec::new();
+        if let Some(group) = self.conf.group_name.as_deref()
+            && !group.is_empty()
+        {
+            fields.push(DataField::from_chars("wp_sink_group", group));
+        }
+        let sink_name = self.conf.name().clone();
+        if !sink_name.is_empty() {
+            fields.push(DataField::from_chars("wp_sink_name", sink_name));
+        }
+        if fields.is_empty() {
+            None
+        } else {
+            Some(DataRecord::from(fields))
+        }
     }
 }
 impl SinkRuntime {
@@ -578,12 +585,14 @@ impl SinkRuntime {
             self.stat_beg_unit_batch(records.len());
             return;
         }
+        let sink_dim_record = self.build_sink_dim_record();
         for record in records {
+            let stat_record = sink_dim_record.as_ref().unwrap_or(record.as_ref());
             self.normal_stat
-                .record_begin(self.name.as_str(), Some(record.as_ref()));
+                .record_begin(self.name.as_str(), Some(stat_record));
             if self.backup_used {
                 self.backup_stat
-                    .record_begin(self.name.as_str(), Some(record.as_ref()));
+                    .record_begin(self.name.as_str(), Some(stat_record));
             }
         }
     }
@@ -595,15 +604,18 @@ impl SinkRuntime {
             self.stat_end_unit_batch(records.len());
             return;
         }
+        let sink_dim_record = self.build_sink_dim_record();
         if self.backup_used {
             for record in records {
+                let stat_record = sink_dim_record.as_ref().unwrap_or(record.as_ref());
                 self.backup_stat
-                    .record_end(self.name.as_str(), Some(record.as_ref()));
+                    .record_end(self.name.as_str(), Some(stat_record));
             }
         } else {
             for record in records {
+                let stat_record = sink_dim_record.as_ref().unwrap_or(record.as_ref());
                 self.normal_stat
-                    .record_end(self.name.as_str(), Some(record.as_ref()));
+                    .record_end(self.name.as_str(), Some(stat_record));
             }
         }
     }
@@ -633,12 +645,14 @@ impl SinkRuntime {
     fn stat_end(&mut self, data: &SinkDataEnum) {
         match &data {
             SinkDataEnum::Rec(_, dat) => {
+                let sink_dim_record = self.build_sink_dim_record();
+                let stat_record = sink_dim_record.as_ref().unwrap_or(dat.as_ref());
                 if self.backup_used {
                     self.backup_stat
-                        .record_end(self.name.as_str(), Some(dat.as_ref()));
+                        .record_end(self.name.as_str(), Some(stat_record));
                 } else {
                     self.normal_stat
-                        .record_end(self.name.as_str(), Some(dat.as_ref()));
+                        .record_end(self.name.as_str(), Some(stat_record));
                 }
             }
             SinkDataEnum::FFV(_) => {
@@ -661,11 +675,13 @@ impl SinkRuntime {
     fn stat_beg(&mut self, data: &SinkDataEnum) {
         match &data {
             SinkDataEnum::Rec(_, dat) => {
+                let sink_dim_record = self.build_sink_dim_record();
+                let stat_record = sink_dim_record.as_ref().unwrap_or(dat.as_ref());
                 self.normal_stat
-                    .record_begin(self.name.as_str(), Some(dat.as_ref()));
+                    .record_begin(self.name.as_str(), Some(stat_record));
                 if self.backup_used {
                     self.backup_stat
-                        .record_begin(self.name.as_str(), Some(dat.as_ref()));
+                        .record_begin(self.name.as_str(), Some(stat_record));
                 }
             }
             SinkDataEnum::FFV(_) => {

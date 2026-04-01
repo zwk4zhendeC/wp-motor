@@ -27,17 +27,12 @@ pub struct MetricCollectors {
 }
 
 pub fn extract_metric_dimensions(tdo: &DataRecord, collects: &[String]) -> DataDim {
-    extract_metric_dimensions_with_target(tdo, collects, "")
+    extract_metric_dimensions_with_target(tdo, collects)
 }
 
-fn extract_metric_dimensions_with_target(
-    tdo: &DataRecord,
-    collects: &[String],
-    target: &str,
-) -> DataDim {
+fn extract_metric_dimensions_with_target(tdo: &DataRecord, collects: &[String]) -> DataDim {
     let mut data = DataDim::with_capacity(collects.len());
     let formatter = Raw;
-    let parsed_target = target.rsplit_once('/');
     for key in collects {
         match key.as_str() {
             "wp_source_type" => {
@@ -56,25 +51,25 @@ fn extract_metric_dimensions_with_target(
                 let value = tdo
                     .field("wp_package_name")
                     .map(|x| formatter.fmt_field(x).to_string());
-                data.push(value.or_else(|| parsed_target.map(|(pkg, _)| pkg.to_string())));
+                data.push(value);
             }
             "wp_rule_name" => {
                 let value = tdo
                     .field("wp_rule_name")
                     .map(|x| formatter.fmt_field(x).to_string());
-                data.push(value.or_else(|| parsed_target.map(|(_, rule)| rule.to_string())));
+                data.push(value);
             }
             "wp_sink_group" => {
                 let value = tdo
                     .field("wp_sink_group")
                     .map(|x| formatter.fmt_field(x).to_string());
-                data.push(value.or_else(|| parsed_target.map(|(group, _)| group.to_string())));
+                data.push(value);
             }
             "wp_sink_name" => {
                 let value = tdo
                     .field("wp_sink_name")
                     .map(|x| formatter.fmt_field(x).to_string());
-                data.push(value.or_else(|| parsed_target.map(|(_, name)| name.to_string())));
+                data.push(value);
             }
             _ => {
                 let value = tdo.field(key.as_str());
@@ -85,15 +80,13 @@ fn extract_metric_dimensions_with_target(
     data
 }
 
-fn extract_metric_dimensions_from_target_only(collects: &[String], target: &str) -> DataDim {
+fn extract_metric_dimensions_from_target_only(collects: &[String], _target: &str) -> DataDim {
     let mut data = DataDim::with_capacity(collects.len());
-    let parsed_target = target.rsplit_once('/');
     for key in collects {
         match key.as_str() {
-            "wp_package_name" => data.push(parsed_target.map(|(pkg, _)| pkg.to_string())),
-            "wp_rule_name" => data.push(parsed_target.map(|(_, rule)| rule.to_string())),
-            "wp_sink_group" => data.push(parsed_target.map(|(group, _)| group.to_string())),
-            "wp_sink_name" => data.push(parsed_target.map(|(_, name)| name.to_string())),
+            "wp_package_name" | "wp_rule_name" | "wp_sink_group" | "wp_sink_name" => {
+                data.push(None)
+            }
             _ => data.push(None),
         }
     }
@@ -120,11 +113,7 @@ impl StatRecorder<Option<&DataRecord>> for MetricCollectors {
                 let (items, groups) = (&mut self.items, &self.data_groups);
                 for group in groups.iter() {
                     if let Some((last, rest)) = group.indices.split_last() {
-                        let data = extract_metric_dimensions_with_target(
-                            tdo,
-                            group.collect.as_slice(),
-                            target,
-                        );
+                        let data = extract_metric_dimensions_with_target(tdo, group.collect.as_slice());
                         for idx in rest {
                             items[*idx].record_begin(target, data.clone());
                         }
@@ -166,11 +155,7 @@ impl StatRecorder<Option<&DataRecord>> for MetricCollectors {
                 let (items, groups) = (&mut self.items, &self.data_groups);
                 for group in groups.iter() {
                     if let Some((last, rest)) = group.indices.split_last() {
-                        let data = extract_metric_dimensions_with_target(
-                            tdo,
-                            group.collect.as_slice(),
-                            rule,
-                        );
+                        let data = extract_metric_dimensions_with_target(tdo, group.collect.as_slice());
                         for idx in rest {
                             items[*idx].record_end(rule, data.clone());
                         }
@@ -196,11 +181,7 @@ impl StatRecorder<Option<&DataRecord>> for MetricCollectors {
                 let (items, groups) = (&mut self.items, &self.data_groups);
                 for group in groups.iter() {
                     if let Some((last, rest)) = group.indices.split_last() {
-                        let data = extract_metric_dimensions_with_target(
-                            tdo,
-                            group.collect.as_slice(),
-                            rule,
-                        );
+                        let data = extract_metric_dimensions_with_target(tdo, group.collect.as_slice());
                         for idx in rest {
                             items[*idx].record_task(rule, data.clone());
                         }
@@ -280,7 +261,7 @@ impl MetricCollectors {
         }
         let (items, groups) = (&mut self.items, &self.data_groups);
         for group in groups.iter() {
-            let data = extract_metric_dimensions_with_target(tdo, group.collect.as_slice(), target);
+            let data = extract_metric_dimensions_with_target(tdo, group.collect.as_slice());
             for idx in group.indices.iter() {
                 items[*idx].record_task_n(target, data.clone(), 0);
             }
@@ -485,6 +466,7 @@ fn fast_now() -> chrono::NaiveDateTime {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use wp_model_core::model::{DataField, DataRecord};
     use wp_stat::{StatRecorder, StatTarget};
 
     #[test]
@@ -503,6 +485,56 @@ mod tests {
 
         let report = collectors.items[0].collect_stat();
         assert_eq!(report.get_data().len(), 1);
+        assert_eq!(report.get_data()[0].stat.total, 1);
+        assert_eq!(report.get_data()[0].stat.success, 1);
+    }
+
+    #[test]
+    fn sink_dims_should_use_record_fields_only() {
+        let mut collectors = MetricCollectors::new(
+            "monitor/victoriametrics".to_string(),
+            vec![StatReq::simple_test(
+                StatTarget::All,
+                vec!["wp_sink_group".to_string(), "wp_sink_name".to_string()],
+                10,
+            )],
+        );
+        let record = DataRecord::from(vec![
+            DataField::from_chars("wp_sink_group", "residue"),
+            DataField::from_chars("wp_sink_name", "residue"),
+        ]);
+
+        collectors.record_begin("monitor/victoriametrics", Some(&record));
+        collectors.record_end("monitor/victoriametrics", Some(&record));
+
+        let report = collectors.items[0].collect_stat();
+        assert_eq!(report.get_data().len(), 1);
+        assert_eq!(report.get_data()[0].get_value().to_string(), "residue,residue");
+        assert_eq!(report.get_data()[0].stat.total, 1);
+        assert_eq!(report.get_data()[0].stat.success, 1);
+    }
+
+    #[test]
+    fn parse_dims_should_use_record_fields_only() {
+        let mut collectors = MetricCollectors::new(
+            "pkg_a/rule_a".to_string(),
+            vec![StatReq::simple_test(
+                StatTarget::All,
+                vec!["wp_package_name".to_string(), "wp_rule_name".to_string()],
+                10,
+            )],
+        );
+        let record = DataRecord::from(vec![
+            DataField::from_chars("wp_package_name", "pkg_b"),
+            DataField::from_chars("wp_rule_name", "rule_b"),
+        ]);
+
+        collectors.record_begin("pkg_a/rule_a", Some(&record));
+        collectors.record_end("pkg_a/rule_a", Some(&record));
+
+        let report = collectors.items[0].collect_stat();
+        assert_eq!(report.get_data().len(), 1);
+        assert_eq!(report.get_data()[0].get_value().to_string(), "pkg_b,rule_b");
         assert_eq!(report.get_data()[0].stat.total, 1);
         assert_eq!(report.get_data()[0].stat.success, 1);
     }

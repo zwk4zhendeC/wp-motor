@@ -36,6 +36,7 @@ pub struct WplPipeline {
 }
 
 impl WplPipeline {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         index: usize,
         wpl_key: String,

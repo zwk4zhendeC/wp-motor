@@ -85,18 +85,18 @@ impl JMActPicker {
 
             let event_cnt = payload.len();
             // 预分配容量，降低大批次下 HashMap 扩容成本。
-            let mut source_ip_counts: HashMap<(String, String), usize> =
+            let mut source_ip_counts: HashMap<(String, Option<String>), usize> =
                 HashMap::with_capacity(event_cnt);
             for event in &payload {
+                let source_type = resolve_source_type(src_key, event);
                 let access_ip = event
                     .tags
                     .get("wp_access_ip")
                     .map(|ip| ip.to_string())
                     .or_else(|| event.ups_ip.map(|ip| ip.to_string()));
-                if let Some(ip) = access_ip {
-                    let source_type = resolve_source_type(src_key, event);
-                    *source_ip_counts.entry((source_type, ip)).or_insert(0) += 1;
-                }
+                *source_ip_counts
+                    .entry((source_type, access_ip))
+                    .or_insert(0) += 1;
             }
             let mut pending_payload = Some(payload);
             let Some(batch_to_send) = pending_payload.take() else {
@@ -152,6 +152,7 @@ mod tests {
     use tokio::sync::mpsc::error::TryRecvError;
     use wp_connector_api::{SourceBatch, SourceEvent, Tags};
     use wp_model_core::raw::RawData;
+    use wp_stat::{StatReq, StatTarget};
 
     const TEST_CMD_BUFFER_CAP: usize = 4;
     const TEST_PARSE_CHANNEL_CAP: usize = 4;
@@ -176,6 +177,17 @@ mod tests {
 
     fn make_metrics() -> MetricCollectors {
         MetricCollectors::new("src".to_string(), vec![])
+    }
+
+    fn make_pick_metrics_with_source_dims(target: &str) -> MetricCollectors {
+        MetricCollectors::new(
+            target.to_string(),
+            vec![StatReq::simple_test(
+                StatTarget::All,
+                vec!["wp_source_type".to_string(), "wp_access_ip".to_string()],
+                10,
+            )],
+        )
     }
 
     #[test]
@@ -236,5 +248,30 @@ mod tests {
 
         // 清理占位消息，避免 channel 继续保持满状态
         assert!(recv.try_recv().is_ok());
+    }
+
+    #[test]
+    fn handle_pending_batch_records_source_type_without_access_ip() {
+        let (parse_tx, _recv) = mpsc::channel::<SourceBatch>(TEST_PARSE_CHANNEL_CAP);
+        let mut picker = JMActPicker::new(ParseDispatchRouter::new(vec![ParseWorkerSender::new(
+            parse_tx,
+        )]));
+
+        picker.extend_pending(vec![make_event("line-1")]);
+        picker.extend_pending(vec![make_event("line-2")]);
+
+        let mut ctrl = make_task_ctrl();
+        let mut metrics = make_pick_metrics_with_source_dims("file_1");
+        let rs = picker.handle_pending_batch("file_1", &mut ctrl, &mut metrics, 2);
+        assert_eq!(rs.send_cnt(), 2);
+
+        let report = metrics.items[0].collect_stat();
+        assert!(
+            report
+                .get_data()
+                .iter()
+                .any(|r| r.get_value().to_string() == "file,*"),
+            "file source should keep wp_source_type even when wp_access_ip is missing"
+        );
     }
 }

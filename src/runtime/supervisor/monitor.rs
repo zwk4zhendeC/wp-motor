@@ -6,11 +6,10 @@ use std::time::Duration;
 
 use crate::runtime::actor::constants::ACTOR_IDLE_TICK_MS;
 use crate::types::AnyResult;
-use tokio::time::sleep;
+use tokio::time::{MissedTickBehavior, interval, sleep};
 
 use wp_stat::ReportVariant;
 use wp_stat::StatReq;
-use wp_stat::TimedStat;
 
 use crate::runtime::actor::command::{CmdSubscriber, TaskController};
 use crate::stat::metric_collect::MetricCollectors;
@@ -71,19 +70,23 @@ impl ActorMonitor {
             .collect();
         wparse_stat.registry(reqs);
         let mut runtime_stat = MetricCollectors::new("__runtime".to_string(), sink_reqs);
-        let mut time_stat = TimedStat::new();
         let mut run_ctrl = TaskController::new("monitor", self.cmd_r.clone(), None);
         info_ctrl!(
             "monitor loop started (stat_sec={}, stat_print={})",
             self.stat_sec,
             self.stat_print
         );
-        let mut stat_check_ticks = 0u8;
         // 进程内存观测器（轻量）：每个统计窗口打印一次当前 RSS
         let cur_pid = sysinfo::get_current_pid().ok();
         let mut sys = System::new_with_specifics(
             RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
         );
+        // 用专用 interval 驱动导出，避免原 stat_check_ticks 在不同流量下引起的窗口抖动：
+        // 原方案每 10 次循环迭代才检查一次时间，低流量时 10×sleep(50ms)=500ms 延迟，
+        // 高流量时迭代无 sleep 则几乎立即检查——两种模式下实际导出窗口相差 ±500ms。
+        let mut export_tick = interval(Duration::from_secs(self.stat_sec as u64));
+        export_tick.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        export_tick.tick().await; // 消耗立即触发的第一次 tick，保持窗口语义一致
         loop {
             tokio::select! {
                 res = self.mon_r.recv() => {
@@ -103,67 +106,60 @@ impl ActorMonitor {
                     run_ctrl.rec_task_idle();
                     if run_ctrl.is_stop() { break; }
                 }
-            }
-
-            stat_check_ticks = stat_check_ticks.wrapping_add(1);
-            if stat_check_ticks < 10 {
-                continue;
-            }
-            stat_check_ticks = 0;
-
-            if time_stat.over_reset_timed(self.stat_sec) {
-                let snapshot = runtime_counters::take_snapshot();
-                if !snapshot.is_empty() {
-                    runtime_stat.record_task_batch(
-                        "__runtime/monitor_send_drop_full",
-                        u64_to_usize(snapshot.monitor_send_drop_full),
-                    );
-                    runtime_stat.record_task_batch(
-                        "__runtime/monitor_send_drop_closed",
-                        u64_to_usize(snapshot.monitor_send_drop_closed),
-                    );
-                    runtime_stat.record_task_batch(
-                        "__runtime/sink_channel_full",
-                        u64_to_usize(snapshot.sink_channel_full),
-                    );
-                    runtime_stat.record_task_batch(
-                        "__runtime/sink_channel_closed",
-                        u64_to_usize(snapshot.sink_channel_closed),
-                    );
-                    merge_collectors_to_slice(&mut runtime_stat, &mut wparse_stat.slice);
-                }
-                if ENABLE_BACKLOG_JUDGEMENT {
-                    emit_backlog_judgement(&wparse_stat.slice, snapshot, self.stat_print);
-                }
-                // 打印一次进程内存（RSS）快照，辅助定位“背压导致的堆积”
-                if let Some(pid) = cur_pid {
-                    // 刷新进程快照，然后读取当前进程 RSS
-                    let _ = sys.refresh_processes(ProcessesToUpdate::All, true);
-                    if let Some(p) = sys.process(pid) {
-                        let rss_mb = (p.memory() as f64) / (1024.0 * 1024.0);
-                        info_mtrc!("mem: rss={:.1} MiB", rss_mb);
+                _ = export_tick.tick() => {
+                    let snapshot = runtime_counters::take_snapshot();
+                    if !snapshot.is_empty() {
+                        runtime_stat.record_task_batch(
+                            "__runtime/monitor_send_drop_full",
+                            u64_to_usize(snapshot.monitor_send_drop_full),
+                        );
+                        runtime_stat.record_task_batch(
+                            "__runtime/monitor_send_drop_closed",
+                            u64_to_usize(snapshot.monitor_send_drop_closed),
+                        );
+                        runtime_stat.record_task_batch(
+                            "__runtime/sink_channel_full",
+                            u64_to_usize(snapshot.sink_channel_full),
+                        );
+                        runtime_stat.record_task_batch(
+                            "__runtime/sink_channel_closed",
+                            u64_to_usize(snapshot.sink_channel_closed),
+                        );
+                        merge_collectors_to_slice(&mut runtime_stat, &mut wparse_stat.slice);
                     }
-                }
-                if self.stat_print {
-                    println!("interval stat:");
-                    wparse_stat.slice.show_table();
-                    println!("sum stat:");
-                    wparse_stat.total.show_table();
-                }
-                if run_ctrl.not_alone() {
-                    let mut tdc_vec = wparse_stat.slice.conv_to_tdc();
-                    while let Some(tdc) = tdc_vec.pop() {
-                        if let Some(sink) = &mut self.sink
-                            && let Err(e) = sink.send_record(0, ProcMeta::Null, tdc.into())
-                        {
-                            error_data!("sink error:{}", e);
+                    if ENABLE_BACKLOG_JUDGEMENT {
+                        emit_backlog_judgement(&wparse_stat.slice, snapshot, self.stat_print);
+                    }
+                    // 打印一次进程内存（RSS）快照，辅助定位"背压导致的堆积"
+                    if let Some(pid) = cur_pid {
+                        // 只刷新当前进程，避免 ProcessesToUpdate::All 全量扫描引入不固定的 syscall 开销
+                        let _ = sys.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
+                        if let Some(p) = sys.process(pid) {
+                            let rss_mb = (p.memory() as f64) / (1024.0 * 1024.0);
+                            info_mtrc!("mem: rss={:.1} MiB", rss_mb);
                         }
                     }
+                    if self.stat_print {
+                        println!("interval stat:");
+                        wparse_stat.slice.show_table();
+                        println!("sum stat:");
+                        wparse_stat.total.show_table();
+                    }
+                    if run_ctrl.not_alone() {
+                        let mut tdc_vec = wparse_stat.slice.conv_to_tdc();
+                        while let Some(tdc) = tdc_vec.pop() {
+                            if let Some(sink) = &mut self.sink
+                                && let Err(e) = sink.send_record(0, ProcMeta::Null, tdc.into())
+                            {
+                                error_data!("sink error:{}", e);
+                            }
+                        }
+                    }
+                    wparse_stat.sum_up();
                 }
-                wparse_stat.sum_up();
             }
         }
-        // 退出前进行一次快速“尾部排空”：尽可能合并缓冲区中剩余的统计片段，避免出现“最后一单元未完成”的不完整统计。
+        // 退出前进行一次快速"尾部排空"：尽可能合并缓冲区中剩余的统计片段，避免出现"最后一单元未完成"的不完整统计。
         while let Ok(x) = self.mon_r.try_recv() {
             wparse_stat.slice.merge_slice(x);
         }

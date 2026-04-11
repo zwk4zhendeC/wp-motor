@@ -316,11 +316,12 @@ impl MetricCollectors {
 
     /// Batch record helper for `(wp_source_type, wp_access_ip)` dimensions.
     ///
-    /// 对于每个维度二元组做聚合计数；若存在缺失维度的事件，则回退到 unit 计数。
+    /// `wp_source_type` 为必填基础维度；`wp_access_ip` 允许缺失（例如 file/kafka）。
+    /// 对于缺失 `wp_access_ip` 的事件，仍以 `(wp_source_type, None)` 参与聚合。
     pub fn record_task_batch_by_source_ip(
         &mut self,
         target: &str,
-        pair_counts: &HashMap<(String, String), usize>,
+        pair_counts: &HashMap<(String, Option<String>), usize>,
         total_count: usize,
     ) {
         if total_count == 0 {
@@ -339,7 +340,7 @@ impl MetricCollectors {
                 }
                 let mut dim = DataDim::with_capacity(2);
                 dim.push(Some(source_type.clone()));
-                dim.push(Some(access_ip.clone()));
+                dim.push(access_ip.clone());
                 collector.record_task_n(target, dim, *cnt);
                 tagged_total += *cnt;
             }
@@ -543,5 +544,34 @@ mod tests {
         assert_eq!(report.get_data()[0].get_value().to_string(), "pkg_b,rule_b");
         assert_eq!(report.get_data()[0].stat.total, 1);
         assert_eq!(report.get_data()[0].stat.success, 1);
+    }
+
+    #[test]
+    fn source_type_should_still_be_recorded_when_access_ip_missing() {
+        let mut collectors = MetricCollectors::new(
+            "src/file_demo".to_string(),
+            vec![StatReq::simple_test(
+                StatTarget::All,
+                vec!["wp_source_type".to_string(), "wp_access_ip".to_string()],
+                10,
+            )],
+        );
+
+        let mut pair_counts: HashMap<(String, Option<String>), usize> = HashMap::new();
+        pair_counts.insert(("file".to_string(), None), 2);
+        pair_counts.insert(("kafka".to_string(), None), 1);
+
+        collectors.record_task_batch_by_source_ip("src/file_demo", &pair_counts, 3);
+
+        let report = collectors.items[0].collect_stat();
+        assert_eq!(report.get_data().len(), 2);
+
+        let mut values: Vec<String> = report
+            .get_data()
+            .iter()
+            .map(|r| r.get_value().to_string())
+            .collect();
+        values.sort();
+        assert_eq!(values, vec!["file,*".to_string(), "kafka,*".to_string()]);
     }
 }

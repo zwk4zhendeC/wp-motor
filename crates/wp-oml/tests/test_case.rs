@@ -760,6 +760,49 @@ async fn test_sql_debug() -> AnyResult<()> {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn test_sql_group_concat_in_with_oml_refs() -> AnyResult<()> {
+    let cache = &mut FieldQueryCache::default();
+    let db = MemDB::global();
+    db.table_create(
+        "CREATE TABLE IF NOT EXISTS asset_enrichment (ip TEXT, asset_type TEXT)",
+    )?;
+    db.execute("DELETE FROM asset_enrichment")?;
+    db.execute(
+        "INSERT INTO asset_enrichment (ip, asset_type) VALUES ('1.1.1.1', 'server')",
+    )?;
+    db.execute(
+        "INSERT INTO asset_enrichment (ip, asset_type) VALUES ('2.2.2.2', 'db')",
+    )?;
+    db.execute(
+        "INSERT INTO asset_enrichment (ip, asset_type) VALUES ('2.2.2.2', 'server')",
+    )?;
+    let _ = wp_knowledge::facade::init_mem_provider(db);
+
+    let mut conf = r#"
+        name : test
+        ---
+        sip = read(raw_sip) ;
+        dip = read(raw_dip) ;
+        alert_type = select group_concat(distinct asset_type) from asset_enrichment where ip in (@sip, @dip) ;
+        "#;
+    let model = oml_parse_raw(&mut conf).await.assert();
+    let src = DataRecord::from(vec![
+        DataField::from_chars("raw_sip", "1.1.1.1"),
+        DataField::from_chars("raw_dip", "2.2.2.2"),
+    ]);
+
+    let target = model.transform_async(src, cache).await;
+    let result = target
+        .get2("alert_type")
+        .expect("alert_type field")
+        .to_string();
+
+    assert!(result.contains("server"), "result={result}");
+    assert!(result.contains("db"), "result={result}");
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn test_value_arr1() {
     let cache = &mut FieldQueryCache::default();
 

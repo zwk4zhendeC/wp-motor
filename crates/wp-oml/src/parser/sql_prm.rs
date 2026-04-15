@@ -72,8 +72,94 @@ fn is_sql_ident(s: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
 }
 
+// 只按最外层逗号切分，忽略括号和引号内部的逗号。
+// 用于解析 select 列表和 IN (...) 参数列表，避免把函数参数切碎。
+fn split_top_level_commas(input: &str) -> Option<Vec<String>> {
+    let mut items = Vec::new();
+    let mut current = String::new();
+    let mut depth = 0i32;
+    let mut in_single = false;
+    let mut in_double = false;
+
+    for ch in input.chars() {
+        match ch {
+            '\'' if !in_double => {
+                in_single = !in_single;
+                current.push(ch);
+            }
+            '"' if !in_single => {
+                in_double = !in_double;
+                current.push(ch);
+            }
+            '(' if !in_single && !in_double => {
+                depth += 1;
+                current.push(ch);
+            }
+            ')' if !in_single && !in_double => {
+                depth -= 1;
+                if depth < 0 {
+                    return None;
+                }
+                current.push(ch);
+            }
+            ',' if !in_single && !in_double && depth == 0 => {
+                let item = current.trim();
+                if item.is_empty() {
+                    return None;
+                }
+                items.push(item.to_string());
+                current.clear();
+            }
+            _ => current.push(ch),
+        }
+    }
+
+    if depth != 0 || in_single || in_double {
+        return None;
+    }
+
+    let tail = current.trim();
+    if tail.is_empty() {
+        return None;
+    }
+    items.push(tail.to_string());
+    Some(items)
+}
+
+fn is_supported_select_item(item: &str) -> bool {
+    // 第一版仅放开简单列项：列名、*、单层函数，以及 fn(distinct col)。
+    // 这里仍保持严格约束，避免把任意 SQL 表达式直接透传到 select body。
+    let item = item.trim();
+    if item == "*" || is_sql_ident(item) {
+        return true;
+    }
+
+    let open = match item.find('(') {
+        Some(pos) => pos,
+        None => return false,
+    };
+    if !item.ends_with(')') {
+        return false;
+    }
+
+    let fn_name = item[..open].trim();
+    if !is_sql_ident(fn_name) {
+        return false;
+    }
+
+    let inner = item[open + 1..item.len() - 1].trim();
+    if inner.is_empty() {
+        return false;
+    }
+    if let Some(rest) = inner.strip_prefix("distinct") {
+        return is_sql_ident(rest.trim());
+    }
+    is_sql_ident(inner)
+}
+
 /// Sanitize SQL body to ensure safe identifiers.
-/// Only allows `<cols> from <table>` where cols are [A-Za-z0-9_.] or '*'.
+/// Only allows `<cols> from <table>` where cols are identifiers, `*`, or a single
+/// SQL function call like `group_concat(distinct asset_type)`.
 fn sanitize_sql_body(body: &str) -> Option<String> {
     let body_trim = body.trim();
     let lower = body_trim.to_lowercase();
@@ -83,16 +169,16 @@ fn sanitize_sql_body(body: &str) -> Option<String> {
     if table_name.is_empty() || !is_sql_ident(table_name) {
         return None;
     }
-    let cols: Vec<&str> = cols_part.split(',').map(|s| s.trim()).collect();
+    let cols = split_top_level_commas(cols_part)?;
     if cols.is_empty() {
         return None;
     }
     for c in &cols {
-        if *c != "*" && !is_sql_ident(c) {
+        if !is_supported_select_item(c) {
             return None;
         }
     }
-    Some(format!("{} from {}", cols.join(","), table_name))
+    Some(format!("{} from {}", cols.join(", "), table_name))
 }
 
 /// Rewrite `fn(...) = <literal>` to `<literal> = fn(...)` for compatibility.
@@ -161,6 +247,13 @@ fn rewrite_lhs_fn_eq_literal(s: &str) -> Option<String> {
 /// Convert a SQL piece, mapping `read(arg)` to `:arg` and collecting params.
 fn to_sql_piece(s: &str, params: &mut HashMap<String, CondAccessor>) -> String {
     let st = s.trim();
+    // SQL 条件里的 @ref 视为 read(ref)，统一编译成命名参数 :ref。
+    if let Some(var) = st.strip_prefix('@')
+        && is_sql_ident(var)
+    {
+        params.insert(var.to_string(), CondAccessor::from_read(var.to_string()));
+        return format!(":{}", var);
+    }
     if let Some(rest) = st.strip_prefix("read(")
         && let Some(rest2) = rest.strip_suffix(")")
     {
@@ -169,6 +262,114 @@ fn to_sql_piece(s: &str, params: &mut HashMap<String, CondAccessor>) -> String {
         return format!(":{}", var);
     }
     st.to_string()
+}
+
+fn is_sql_literal_piece(s: &str) -> bool {
+    let st = s.trim();
+    if st.is_empty() {
+        return false;
+    }
+    if (st.starts_with('\'') && st.ends_with('\'')) || (st.starts_with('"') && st.ends_with('"')) {
+        return st.len() >= 2;
+    }
+    st.parse::<i64>().is_ok() || st.parse::<f64>().is_ok()
+}
+
+// 在最外层扫描 SQL 关键字 `in`，允许后面直接跟 `(`，也允许写成 `in (`。
+// 这里故意只识别顶层位置，避免误命中引号或括号内部的内容。
+fn find_top_level_in_keyword(input: &str) -> Option<usize> {
+    let bytes = input.as_bytes();
+    let mut depth = 0i32;
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut idx = 0usize;
+
+    while idx < bytes.len() {
+        let ch = bytes[idx] as char;
+        match ch {
+            '\'' if !in_double => {
+                in_single = !in_single;
+                idx += 1;
+                continue;
+            }
+            '"' if !in_single => {
+                in_double = !in_double;
+                idx += 1;
+                continue;
+            }
+            '(' if !in_single && !in_double => {
+                depth += 1;
+                idx += 1;
+                continue;
+            }
+            ')' if !in_single && !in_double => {
+                depth -= 1;
+                if depth < 0 {
+                    return None;
+                }
+                idx += 1;
+                continue;
+            }
+            _ => {}
+        }
+
+        if depth == 0 && !in_single && !in_double && idx + 1 < bytes.len() {
+            let c1 = bytes[idx].to_ascii_lowercase();
+            let c2 = bytes[idx + 1].to_ascii_lowercase();
+            if c1 == b'i' && c2 == b'n' {
+                let prev_ok = idx > 0
+                    && ((bytes[idx - 1] as char).is_ascii_whitespace()
+                        || bytes[idx - 1] == b')');
+                if !prev_ok {
+                    idx += 1;
+                    continue;
+                }
+
+                let mut next = idx + 2;
+                while next < bytes.len() && (bytes[next] as char).is_ascii_whitespace() {
+                    next += 1;
+                }
+                if next < bytes.len() && bytes[next] == b'(' {
+                    return Some(idx);
+                }
+            }
+        }
+
+        idx += 1;
+    }
+
+    None
+}
+
+fn fast_path_in_list(s: &str) -> Option<(String, HashMap<String, CondAccessor>)> {
+    // 针对 `field in (...)` 的轻量 fast path。
+    // 当前只支持简单列表项（@ref/read/字面量），未命中时回退到通用条件解析。
+    let t = s.trim();
+    let in_pos = find_top_level_in_keyword(t)?;
+    let lhs = t[..in_pos].trim();
+    if !is_sql_ident(lhs) {
+        return None;
+    }
+    let rhs = t[in_pos + 2..].trim();
+    let inner = rhs.strip_prefix('(')?.strip_suffix(')')?.trim();
+    let parts = split_top_level_commas(inner)?;
+    if parts.is_empty() {
+        return None;
+    }
+
+    let mut params = HashMap::new();
+    let mut items = Vec::with_capacity(parts.len());
+    for part in parts {
+        let sql_piece = to_sql_piece(&part, &mut params);
+        let trimmed = sql_piece.trim();
+        if trimmed.starts_with(':') || is_sql_literal_piece(trimmed) {
+            items.push(trimmed.to_string());
+            continue;
+        }
+        return None;
+    }
+
+    Some((format!("{} IN ({})", lhs, items.join(", ")), params))
 }
 
 /// Fast path for `1 = ip4_between(read(x), a, b)` pattern.
@@ -217,8 +418,14 @@ pub fn oml_sql(data: &mut &str) -> WResult<SqlQuery> {
     let sql_cond_buf: String =
         rewrite_lhs_fn_eq_literal(sql_cond_raw).unwrap_or_else(|| sql_cond_raw.to_string());
 
-    // Fast path: support `1 = ip4_between(read(x), a, b)` without generic cond parser
+    // 优先处理 ip4_between(...)=1 这类 SQL 专用条件，避免落回通用条件解析。
     if let Some((w_sql, vars)) = fast_path_ip4_between_eq_one(&sql_cond_buf) {
+        let sql = format!("select {} where {}", sql_body, w_sql);
+        return Ok(SqlQuery::new(sql, vars));
+    }
+
+    // 优先处理 field in (...)，支持 @ref 形式的 OML 变量引用。
+    if let Some((w_sql, vars)) = fast_path_in_list(&sql_cond_buf) {
         let sql = format!("select {} where {}", sql_body, w_sql);
         return Ok(SqlQuery::new(sql, vars));
     }
@@ -289,6 +496,35 @@ mod tests {
         let mut code = r#" select a, b from table_1 where x = Now::time() and y = read(src) ;"#;
         assert_oml_parse(&mut code, oml_sql);
 
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_oml_sql_group_concat_in_ref() -> ModalResult<()> {
+        super::set_sql_strict_for_test(Some(true));
+        let mut code = r#" select group_concat(distinct asset_type) from asset_enrichment where ip in (@sip, @dip) ;"#;
+        let parsed = oml_sql.parse_next(&mut code)?;
+        assert_eq!(
+            parsed.oml_sql().split_whitespace().collect::<Vec<_>>().join(" "),
+            "select group_concat(distinct asset_type) from asset_enrichment where ip IN (:sip, :dip)"
+        );
+        assert!(parsed.vars().contains_key("sip"));
+        assert!(parsed.vars().contains_key("dip"));
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_oml_sql_group_concat_in_ref_without_space_before_paren() -> ModalResult<()> {
+        super::set_sql_strict_for_test(Some(true));
+        let mut code =
+            r#" select group_concat(distinct asset_type) from asset_enrichment where ip in(@sip, @dip) ;"#;
+        let parsed = oml_sql.parse_next(&mut code)?;
+        assert_eq!(
+            parsed.oml_sql().split_whitespace().collect::<Vec<_>>().join(" "),
+            "select group_concat(distinct asset_type) from asset_enrichment where ip IN (:sip, :dip)"
+        );
+        assert!(parsed.vars().contains_key("sip"));
+        assert!(parsed.vars().contains_key("dip"));
         Ok(())
     }
 

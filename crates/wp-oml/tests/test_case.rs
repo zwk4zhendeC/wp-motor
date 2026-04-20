@@ -276,7 +276,10 @@ async fn test_crate_move() {
     // println!("{:#?}",target.get_field_owned("A2"));
     // println!("{:#?}",expect.get_field_owned("A1"));
     // println!("{:#?}",target.get_field_owned("A1"));
-    assert_eq!(target.get_field_owned("A2").unwrap().get_value(), expect.get_field_owned("A1").unwrap().get_value());
+    assert_eq!(
+        target.get_field_owned("A2").unwrap().get_value(),
+        expect.get_field_owned("A1").unwrap().get_value()
+    );
     assert!(target.get_field_owned("A1").is_none())
 }
 

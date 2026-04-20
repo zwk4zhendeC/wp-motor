@@ -377,10 +377,8 @@ fn fast_path_ip4_between_eq_one(s: &str) -> Option<(String, HashMap<String, Cond
     let t = s.trim();
     let t = if let Some(rest) = t.strip_prefix("1=") {
         rest
-    } else if let Some(rest) = t.strip_prefix("1 =") {
-        rest
     } else {
-        return None;
+        t.strip_prefix("1 =")?
     };
     let t = t.trim_start();
     if !t.starts_with("ip4_between(") {

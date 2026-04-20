@@ -11,7 +11,7 @@ impl FmtOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         let mut args = HashMap::new();
         let mut not_find_items = Vec::new();
@@ -60,7 +60,7 @@ impl FmtOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_one(target, src, dst)
             .map(FieldStorage::from_owned)
@@ -86,7 +86,7 @@ impl AsyncFieldExtractor for FmtOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         let mut args = HashMap::new();
         let mut not_find_items = Vec::new();
@@ -133,7 +133,7 @@ impl AsyncFieldExtractor for FmtOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_one_async(target, src, dst)
             .await

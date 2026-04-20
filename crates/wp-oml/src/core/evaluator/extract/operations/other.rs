@@ -28,10 +28,7 @@ impl AsyncExpEvaluator for SingleEvalExp {
                 }
             }
         } else if let Some(target) = self.target().first()
-            && let Some(mut storage) = self
-                .eval_way()
-                .extract_storage_async(target, src, dst)
-                .await
+            && let Some(mut storage) = self.eval_way().extract_storage_async(target, src, dst).await
         {
             let needs_conversion =
                 target.data_type() != storage.get_meta() && target.data_type() != &DataType::Auto;
@@ -59,7 +56,7 @@ impl NestedBinding {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.acquirer().extract_storage(target, src, dst)
     }
@@ -68,7 +65,7 @@ impl NestedBinding {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         self.acquirer().extract_one(target, src, dst)
     }
@@ -76,7 +73,7 @@ impl NestedBinding {
     pub(crate) fn extract_more(
         &self,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
         cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         self.acquirer().extract_more(src, dst, cache)
@@ -93,7 +90,7 @@ impl AsyncFieldExtractor for NestedBinding {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         self.acquirer().extract_one_async(target, src, dst).await
     }
@@ -102,7 +99,7 @@ impl AsyncFieldExtractor for NestedBinding {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.acquirer()
             .extract_storage_async(target, src, dst)
@@ -112,7 +109,7 @@ impl AsyncFieldExtractor for NestedBinding {
     async fn extract_more_async(
         &self,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
         cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         self.acquirer().extract_more_async(src, dst, cache).await
@@ -129,7 +126,7 @@ impl GenericBinding {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.accessor().extract_storage(target, src, dst)
     }
@@ -138,7 +135,7 @@ impl GenericBinding {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         self.accessor().extract_one(target, src, dst)
     }
@@ -146,7 +143,7 @@ impl GenericBinding {
     pub(crate) fn extract_more(
         &self,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
         cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         self.accessor().extract_more(src, dst, cache)
@@ -163,7 +160,7 @@ impl AsyncFieldExtractor for GenericBinding {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         self.accessor().extract_one_async(target, src, dst).await
     }
@@ -172,7 +169,7 @@ impl AsyncFieldExtractor for GenericBinding {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.accessor()
             .extract_storage_async(target, src, dst)
@@ -182,7 +179,7 @@ impl AsyncFieldExtractor for GenericBinding {
     async fn extract_more_async(
         &self,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
         cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         self.accessor().extract_more_async(src, dst, cache).await
@@ -199,7 +196,7 @@ impl GenericAccessor {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         match self {
             // Static symbol: return Shared variant (zero-copy)
@@ -223,7 +220,7 @@ impl GenericAccessor {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         match self {
             GenericAccessor::Field(x) => {
@@ -242,7 +239,7 @@ impl GenericAccessor {
     pub(crate) fn extract_more(
         &self,
         _src: &mut DataRecordRef<'_>,
-        _dst: &DataRecord,
+        _dst: &mut DataRecord,
         _cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         Vec::new()
@@ -259,7 +256,7 @@ impl AsyncFieldExtractor for GenericAccessor {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         match self {
             GenericAccessor::Field(x) => x.extract_one_async(target, src, dst).await,
@@ -275,7 +272,7 @@ impl AsyncFieldExtractor for GenericAccessor {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         match self {
             GenericAccessor::Field(x) => x.extract_storage_async(target, src, dst).await,
@@ -292,7 +289,7 @@ impl AsyncFieldExtractor for GenericAccessor {
     async fn extract_more_async(
         &self,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
         cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         match self {

@@ -196,7 +196,7 @@ fn eval_expr(
     expr: &CalcExpr,
     target: &EvaluationTarget,
     src: &mut DataRecordRef<'_>,
-    dst: &DataRecord,
+    dst: &mut DataRecord,
 ) -> Result<CalcNumber, CalcEvalError> {
     match expr {
         CalcExpr::Const(v) => Ok(v.clone()),
@@ -225,7 +225,7 @@ impl CalcOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         match eval_expr(self.expr(), target, src, dst) {
             Ok(number) => Some(number.into_field(target.safe_name())),
@@ -241,7 +241,7 @@ impl CalcOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_one(target, src, dst)
             .map(FieldStorage::from_owned)
@@ -267,7 +267,7 @@ impl AsyncFieldExtractor for CalcOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         self.extract_one(target, src, dst)
     }
@@ -276,7 +276,7 @@ impl AsyncFieldExtractor for CalcOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_storage(target, src, dst)
     }

@@ -93,6 +93,49 @@ async fn test_take_fun() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn test_take_consumes_prior_oml_field_from_dst() {
+    let cache = &mut FieldQueryCache::default();
+    let src = DataRecord::from(vec![
+        DataField::from_chars("sip", "10.0.220.200"),
+        DataField::from_chars("dip", "10.0.220.201"),
+    ]);
+
+    let mut conf = r#"
+        name : test
+        ---
+        src_ip : ip = take(sip);
+        dist_ip : ip = take(dip);
+        a : ip = read(src_ip);
+        b : ip = take(src_ip);
+        "#;
+    let model = oml_parse_raw(&mut conf).await.assert();
+    let target = model.transform_async(src, cache).await;
+
+    assert!(target.get_value("src_ip").is_none(), "target={target}");
+    assert_eq!(
+        target.get_field_owned("a"),
+        Some(DataField::from_ip(
+            "a",
+            IpAddr::V4(Ipv4Addr::new(10, 0, 220, 200))
+        ))
+    );
+    assert_eq!(
+        target.get_field_owned("b"),
+        Some(DataField::from_ip(
+            "b",
+            IpAddr::V4(Ipv4Addr::new(10, 0, 220, 200))
+        ))
+    );
+    assert_eq!(
+        target.get_field_owned("dist_ip"),
+        Some(DataField::from_ip(
+            "dist_ip",
+            IpAddr::V4(Ipv4Addr::new(10, 0, 220, 201))
+        ))
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn test_take_conv() {
     let cache = &mut FieldQueryCache::default();
 

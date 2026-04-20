@@ -14,7 +14,7 @@ impl MapOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         let name = target.name().clone().unwrap_or("_".to_string());
         let mut obj = ObjectValue::default();
@@ -51,7 +51,7 @@ impl MapOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_one(target, src, dst)
             .map(FieldStorage::from_owned)
@@ -77,7 +77,7 @@ impl AsyncFieldExtractor for MapOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         let name = target.name().clone().unwrap_or("_".to_string());
         let mut obj = ObjectValue::default();
@@ -114,7 +114,7 @@ impl AsyncFieldExtractor for MapOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_one_async(target, src, dst)
             .await

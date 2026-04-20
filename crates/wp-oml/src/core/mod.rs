@@ -26,14 +26,14 @@ pub trait AsyncFieldExtractor {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField>;
 
     async fn extract_storage_async(
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_one_async(target, src, dst)
             .await
@@ -43,7 +43,7 @@ pub trait AsyncFieldExtractor {
     async fn extract_more_async(
         &self,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
         cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         let _ = (src, dst, cache);
@@ -61,7 +61,7 @@ impl AsyncFieldExtractor for PreciseEvaluator {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         match self {
             PreciseEvaluator::Sql(o) => o.extract_one_async(target, src, dst).await,
@@ -87,7 +87,7 @@ impl AsyncFieldExtractor for PreciseEvaluator {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         match self {
             PreciseEvaluator::Sql(o) => o.extract_storage_async(target, src, dst).await,
@@ -114,7 +114,7 @@ impl AsyncFieldExtractor for PreciseEvaluator {
     async fn extract_more_async(
         &self,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
         cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         match self {

@@ -23,7 +23,7 @@ fn norm_query_field(field: &DataField) -> DataField {
 fn collect_sql_params(
     query: &SqlQuery,
     src: &mut DataRecordRef<'_>,
-    dst: &DataRecord,
+    dst: &mut DataRecord,
 ) -> (String, DataField, Vec<DataField>) {
     let mut params = Vec::with_capacity(5);
     let target = EvaluationTarget::auto_default();
@@ -52,7 +52,7 @@ impl SqlQuery {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         // 单值提取在 SQL 评估中不支持，返回 None 以避免运行期 panic
         None
@@ -62,7 +62,7 @@ impl SqlQuery {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_one(target, src, dst)
             .map(FieldStorage::from_owned)
@@ -71,7 +71,7 @@ impl SqlQuery {
     pub(crate) fn extract_more(
         &self,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
         cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         let (sql, md5, params) = collect_sql_params(self, src, dst);
@@ -216,7 +216,7 @@ impl AsyncFieldExtractor for SqlQuery {
         &self,
         _target: &EvaluationTarget,
         _src: &mut DataRecordRef<'_>,
-        _dst: &DataRecord,
+        _dst: &mut DataRecord,
     ) -> Option<DataField> {
         None
     }
@@ -224,7 +224,7 @@ impl AsyncFieldExtractor for SqlQuery {
     async fn extract_more_async(
         &self,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
         cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         let (sql, md5, params) = collect_sql_params(self, src, dst);
@@ -419,7 +419,7 @@ mod tests {
         let query = create_test_query("SELECT * FROM test WHERE id = 1", vec![]);
         let result = query.extract_more(
             &mut DataRecordRef::from(&DataRecord::default()),
-            &DataRecord::default(),
+            &mut DataRecord::default(),
             cache,
         );
 
@@ -438,7 +438,7 @@ mod tests {
 
         let result = query.extract_more(
             &mut DataRecordRef::from(&DataRecord::default()),
-            &DataRecord::default(),
+            &mut DataRecord::default(),
             cache,
         );
 
@@ -462,7 +462,7 @@ mod tests {
 
         let result = query.extract_more(
             &mut DataRecordRef::from(&DataRecord::default()),
-            &DataRecord::default(),
+            &mut DataRecord::default(),
             cache,
         );
 
@@ -491,7 +491,7 @@ mod tests {
 
         let result = query.extract_more(
             &mut DataRecordRef::from(&DataRecord::default()),
-            &DataRecord::default(),
+            &mut DataRecord::default(),
             cache,
         );
 
@@ -519,7 +519,7 @@ mod tests {
 
         let result = query.extract_more(
             &mut DataRecordRef::from(&DataRecord::default()),
-            &DataRecord::default(),
+            &mut DataRecord::default(),
             cache,
         );
 
@@ -533,11 +533,12 @@ mod tests {
 
         let param = DataField::from_digit("id".to_string(), 1);
         let query = create_test_query("SELECT * FROM test WHERE id = :id", vec![("id", param)]);
+        let mut dst = DataRecord::default();
 
         let result = query
             .extract_more_async(
                 &mut DataRecordRef::from(&DataRecord::default()),
-                &DataRecord::default(),
+                &mut dst,
                 cache,
             )
             .await;

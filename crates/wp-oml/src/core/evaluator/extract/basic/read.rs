@@ -8,7 +8,7 @@ impl FieldRead {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         let key_string = self
             .get()
@@ -38,7 +38,7 @@ impl FieldRead {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         let key_string = self
             .get()
@@ -71,7 +71,7 @@ impl FieldRead {
     pub(crate) fn extract_more(
         &self,
         _src: &mut DataRecordRef<'_>,
-        _dst: &DataRecord,
+        _dst: &mut DataRecord,
         _cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         Vec::new()
@@ -88,7 +88,7 @@ impl AsyncFieldExtractor for FieldRead {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         self.extract_one(target, src, dst)
     }
@@ -97,7 +97,7 @@ impl AsyncFieldExtractor for FieldRead {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_storage(target, src, dst)
     }
@@ -105,7 +105,7 @@ impl AsyncFieldExtractor for FieldRead {
     async fn extract_more_async(
         &self,
         _src: &mut DataRecordRef<'_>,
-        _dst: &DataRecord,
+        _dst: &mut DataRecord,
         _cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         Vec::new()

@@ -115,7 +115,7 @@ pub(crate) fn data_field_extract_storage(
 pub(crate) fn data_field_extract_more(
     _field: &DataField,
     _src: &mut DataRecordRef<'_>,
-    _dst: &DataRecord,
+    _dst: &mut DataRecord,
     _cache: &mut FieldQueryCache,
 ) -> Vec<DataField> {
     Vec::new()
@@ -150,7 +150,7 @@ pub(crate) fn value_extract_storage(
 pub(crate) fn value_extract_more(
     _value: &Value,
     _src: &mut DataRecordRef<'_>,
-    _dst: &DataRecord,
+    _dst: &mut DataRecord,
     _cache: &mut FieldQueryCache,
 ) -> Vec<DataField> {
     Vec::new()
@@ -166,7 +166,7 @@ impl AsyncFieldExtractor for DataField {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         data_field_extract_one(self, target, src, dst)
     }
@@ -175,7 +175,7 @@ impl AsyncFieldExtractor for DataField {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         data_field_extract_storage(self, target, src, dst)
     }
@@ -183,7 +183,7 @@ impl AsyncFieldExtractor for DataField {
     async fn extract_more_async(
         &self,
         _src: &mut DataRecordRef<'_>,
-        _dst: &DataRecord,
+        _dst: &mut DataRecord,
         _cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         data_field_extract_more(self, _src, _dst, _cache)

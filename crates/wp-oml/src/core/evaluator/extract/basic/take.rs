@@ -12,17 +12,22 @@ impl FieldTake {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        _dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         let target_name = target.safe_name();
         let key_string = self.get().clone().unwrap_or(target_name.clone());
-        //let key_string = self.get().clone().unwrap_or(target.name().to_string());
         let key = key_string.as_str();
+        if let Some(value) = find_move_tdc(dst, key, false) {
+            return Some(value);
+        }
         if let Some(value) = find_move_tdo(target, src, key, false) {
             return Some(value);
         }
 
         for option in self.option() {
+            if let Some(value) = find_move_tdc(dst, option, true) {
+                return Some(value);
+            }
             if let Some(value) = find_move_tdo(target, src, option, true) {
                 return Some(value);
             }
@@ -34,7 +39,7 @@ impl FieldTake {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_one(target, src, dst)
             .map(FieldStorage::from_owned)
@@ -43,7 +48,7 @@ impl FieldTake {
     pub(crate) fn extract_more(
         &self,
         _src: &mut DataRecordRef<'_>,
-        _dst: &DataRecord,
+        _dst: &mut DataRecord,
         _cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         Vec::new()
@@ -60,7 +65,7 @@ impl AsyncFieldExtractor for FieldTake {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         self.extract_one(target, src, dst)
     }
@@ -69,7 +74,7 @@ impl AsyncFieldExtractor for FieldTake {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_storage(target, src, dst)
     }
@@ -77,7 +82,7 @@ impl AsyncFieldExtractor for FieldTake {
     async fn extract_more_async(
         &self,
         _src: &mut DataRecordRef<'_>,
-        _dst: &DataRecord,
+        _dst: &mut DataRecord,
         _cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         Vec::new()
@@ -98,6 +103,14 @@ fn find_move_tdo(
         return Some(obj);
     }
     None
+}
+
+fn find_move_tdc(dst: &mut DataRecord, key: &str, option: bool) -> Option<DataField> {
+    let idx = dst
+        .items
+        .iter()
+        .position(|item| item.get_name() == key && !(option && item.as_field().value.is_empty()))?;
+    Some(dst.items.remove(idx).into_owned())
 }
 
 impl FieldCollector for FieldTake {

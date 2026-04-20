@@ -10,7 +10,7 @@ impl NowTime {
         &self,
         target: &EvaluationTarget,
         _src: &mut DataRecordRef<'_>,
-        _dst: &DataRecord,
+        _dst: &mut DataRecord,
     ) -> Option<DataField> {
         let now = Local::now();
         let name = target.name().clone().unwrap_or("_".to_string());
@@ -21,7 +21,7 @@ impl NowTime {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_one(target, src, dst)
             .map(FieldStorage::from_owned)
@@ -38,7 +38,7 @@ impl AsyncFieldExtractor for NowTime {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         self.extract_one(target, src, dst)
     }
@@ -47,7 +47,7 @@ impl AsyncFieldExtractor for NowTime {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_storage(target, src, dst)
     }
@@ -55,7 +55,7 @@ impl AsyncFieldExtractor for NowTime {
     async fn extract_more_async(
         &self,
         _src: &mut DataRecordRef<'_>,
-        _dst: &DataRecord,
+        _dst: &mut DataRecord,
         _cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         Vec::new()
@@ -68,7 +68,7 @@ impl FunOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         self.fun().extract_one(target, src, dst)
     }
@@ -77,7 +77,7 @@ impl FunOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_one(target, src, dst)
             .map(FieldStorage::from_owned)
@@ -103,7 +103,7 @@ impl AsyncFieldExtractor for FunOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         self.fun().extract_one_async(target, src, dst).await
     }
@@ -112,7 +112,7 @@ impl AsyncFieldExtractor for FunOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.fun().extract_storage_async(target, src, dst).await
     }
@@ -124,7 +124,7 @@ impl BuiltinFunction {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         match self {
             BuiltinFunction::NowTime(x) => x.extract_one(target, src, dst),
@@ -137,7 +137,7 @@ impl BuiltinFunction {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_one(target, src, dst)
             .map(FieldStorage::from_owned)
@@ -163,7 +163,7 @@ impl AsyncFieldExtractor for BuiltinFunction {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         match self {
             BuiltinFunction::NowTime(x) => x.extract_one_async(target, src, dst).await,
@@ -176,7 +176,7 @@ impl AsyncFieldExtractor for BuiltinFunction {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         match self {
             BuiltinFunction::NowTime(x) => x.extract_storage_async(target, src, dst).await,
@@ -191,7 +191,7 @@ impl NowDate {
         &self,
         target: &EvaluationTarget,
         _src: &mut DataRecordRef<'_>,
-        _dst: &DataRecord,
+        _dst: &mut DataRecord,
     ) -> Option<DataField> {
         let now = Local::now().naive_local();
         let name = target.safe_name();
@@ -206,7 +206,7 @@ impl NowDate {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_one(target, src, dst)
             .map(FieldStorage::from_owned)
@@ -223,7 +223,7 @@ impl AsyncFieldExtractor for NowDate {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         self.extract_one(target, src, dst)
     }
@@ -232,7 +232,7 @@ impl AsyncFieldExtractor for NowDate {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_storage(target, src, dst)
     }
@@ -240,7 +240,7 @@ impl AsyncFieldExtractor for NowDate {
     async fn extract_more_async(
         &self,
         _src: &mut DataRecordRef<'_>,
-        _dst: &DataRecord,
+        _dst: &mut DataRecord,
         _cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         Vec::new()
@@ -253,7 +253,7 @@ impl NowHour {
         &self,
         target: &EvaluationTarget,
         _src: &mut DataRecordRef<'_>,
-        _dst: &DataRecord,
+        _dst: &mut DataRecord,
     ) -> Option<DataField> {
         let now = Local::now().naive_local();
         let name = target.safe_name();
@@ -271,7 +271,7 @@ impl NowHour {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_one(target, src, dst)
             .map(FieldStorage::from_owned)
@@ -288,7 +288,7 @@ impl AsyncFieldExtractor for NowHour {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         self.extract_one(target, src, dst)
     }
@@ -297,7 +297,7 @@ impl AsyncFieldExtractor for NowHour {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_storage(target, src, dst)
     }
@@ -305,7 +305,7 @@ impl AsyncFieldExtractor for NowHour {
     async fn extract_more_async(
         &self,
         _src: &mut DataRecordRef<'_>,
-        _dst: &DataRecord,
+        _dst: &mut DataRecord,
         _cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         Vec::new()

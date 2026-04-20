@@ -27,7 +27,7 @@ impl DirectAccessor {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         match self {
             DirectAccessor::Take(o) => o.extract_one(target, src, dst),
@@ -39,7 +39,7 @@ impl DirectAccessor {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_one(target, src, dst)
             .map(FieldStorage::from_owned)
@@ -48,7 +48,7 @@ impl DirectAccessor {
     pub(crate) fn extract_more(
         &self,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
         cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         match self {
@@ -71,7 +71,7 @@ impl AsyncFieldExtractor for DirectAccessor {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         match self {
             DirectAccessor::Take(o) => o.extract_one_async(target, src, dst).await,
@@ -83,7 +83,7 @@ impl AsyncFieldExtractor for DirectAccessor {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         match self {
             DirectAccessor::Take(o) => o.extract_storage_async(target, src, dst).await,
@@ -94,7 +94,7 @@ impl AsyncFieldExtractor for DirectAccessor {
     async fn extract_more_async(
         &self,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
         cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         match self {

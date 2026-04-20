@@ -10,7 +10,7 @@ impl RecordOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         match self.dat_get.extract_one(target, src, dst) {
             Some(x) => Some(x),
@@ -34,7 +34,7 @@ impl RecordOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         // Try primary extraction first
         if let Some(storage) = self.dat_get.extract_storage(target, src, dst) {
@@ -65,7 +65,7 @@ impl RecordOperation {
     pub(crate) fn extract_more(
         &self,
         _src: &mut DataRecordRef<'_>,
-        _dst: &DataRecord,
+        _dst: &mut DataRecord,
         _cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         Vec::new()
@@ -82,7 +82,7 @@ impl AsyncFieldExtractor for RecordOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         match self.dat_get.extract_one_async(target, src, dst).await {
             Some(x) => Some(x),
@@ -105,7 +105,7 @@ impl AsyncFieldExtractor for RecordOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         if let Some(storage) = self.dat_get.extract_storage_async(target, src, dst).await {
             return Some(storage);

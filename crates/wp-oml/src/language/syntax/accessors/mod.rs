@@ -35,7 +35,7 @@ impl NestedAccessor {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         match self {
             // Static symbol: return Shared variant (zero-copy)
@@ -52,7 +52,7 @@ impl NestedAccessor {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         match self {
             NestedAccessor::Field(o) => {
@@ -72,7 +72,7 @@ impl NestedAccessor {
     pub(crate) fn extract_more(
         &self,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
         cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         match self {
@@ -110,7 +110,7 @@ impl AsyncFieldExtractor for NestedAccessor {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         match self {
             NestedAccessor::Field(o) => o.extract_one_async(target, src, dst).await,
@@ -128,7 +128,7 @@ impl AsyncFieldExtractor for NestedAccessor {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         match self {
             NestedAccessor::Field(o) => o.extract_storage_async(target, src, dst).await,
@@ -145,7 +145,7 @@ impl AsyncFieldExtractor for NestedAccessor {
     async fn extract_more_async(
         &self,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
         cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         match self {
@@ -307,7 +307,7 @@ impl CondAccessor {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         match self {
             CondAccessor::Tdc(x) => x.extract_one(target, src, dst),
@@ -321,7 +321,7 @@ impl CondAccessor {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_one(target, src, dst)
             .map(FieldStorage::from_owned)
@@ -330,7 +330,7 @@ impl CondAccessor {
     pub(crate) fn extract_more(
         &self,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
         cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         match self {
@@ -356,7 +356,7 @@ impl AsyncFieldExtractor for CondAccessor {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         match self {
             CondAccessor::Tdc(x) => x.extract_one_async(target, src, dst).await,
@@ -370,7 +370,7 @@ impl AsyncFieldExtractor for CondAccessor {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         match self {
             CondAccessor::Tdc(x) => x.extract_storage_async(target, src, dst).await,
@@ -383,7 +383,7 @@ impl AsyncFieldExtractor for CondAccessor {
     async fn extract_more_async(
         &self,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
         cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         match self {
@@ -452,7 +452,7 @@ impl AsyncFieldExtractor for Value {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         crate::language::value_extract_one(self, target, src, dst)
     }
@@ -461,7 +461,7 @@ impl AsyncFieldExtractor for Value {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         crate::language::value_extract_storage(self, target, src, dst)
     }
@@ -469,7 +469,7 @@ impl AsyncFieldExtractor for Value {
     async fn extract_more_async(
         &self,
         _src: &mut DataRecordRef<'_>,
-        _dst: &DataRecord,
+        _dst: &mut DataRecord,
         _cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         crate::language::value_extract_more(self, _src, _dst, _cache)

@@ -14,7 +14,7 @@ impl PiPeOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         if let Some(mut from) = self.from().extract_one(target, src, dst) {
             for pipe in self.items() {
@@ -29,7 +29,7 @@ impl PiPeOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         // Use extract_storage to preserve zero-copy for Shared variants
         if let Some(mut from_storage) = self.from().extract_storage(target, src, dst) {
@@ -61,7 +61,7 @@ impl AsyncFieldExtractor for PiPeOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         if let Some(mut from) = self.from().extract_one_async(target, src, dst).await {
             for pipe in self.items() {
@@ -76,7 +76,7 @@ impl AsyncFieldExtractor for PiPeOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         if let Some(mut from_storage) = self.from().extract_storage_async(target, src, dst).await {
             for pipe in self.items() {

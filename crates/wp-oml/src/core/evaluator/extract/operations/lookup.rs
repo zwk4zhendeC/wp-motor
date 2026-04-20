@@ -14,7 +14,7 @@ impl LookupOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         let key_field = self.key().extract_one_async(target, src, dst).await;
         if let Some(field) = key_field
@@ -35,7 +35,7 @@ impl AsyncFieldExtractor for LookupOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         self.resolve_storage_async(target, src, dst)
             .await
@@ -46,7 +46,7 @@ impl AsyncFieldExtractor for LookupOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.resolve_storage_async(target, src, dst).await
     }

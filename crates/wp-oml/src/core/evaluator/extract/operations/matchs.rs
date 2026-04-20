@@ -13,7 +13,7 @@ impl MatchOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         match self.dat_crate() {
             MatchSource::Single(dat) => {
@@ -60,7 +60,7 @@ impl MatchOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         // Use extract_storage instead of extract_one to preserve zero-copy for Arc variants
         match self.dat_crate() {
@@ -126,7 +126,7 @@ impl AsyncFieldExtractor for MatchOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         match self.dat_crate() {
             MatchSource::Single(dat) => {
@@ -172,7 +172,7 @@ impl AsyncFieldExtractor for MatchOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         match self.dat_crate() {
             MatchSource::Single(dat) => {

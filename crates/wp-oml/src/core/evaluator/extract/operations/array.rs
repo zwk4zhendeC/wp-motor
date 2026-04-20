@@ -11,7 +11,7 @@ impl ArrOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         let target_name = target.name().clone().unwrap_or("_".to_string());
         let arr = self.dat_crate.collect_item(target_name.as_str(), src, dst);
@@ -26,7 +26,7 @@ impl ArrOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_one(target, src, dst)
             .map(FieldStorage::from_owned)
@@ -52,7 +52,7 @@ impl AsyncFieldExtractor for ArrOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<DataField> {
         self.extract_one(target, src, dst)
     }
@@ -61,7 +61,7 @@ impl AsyncFieldExtractor for ArrOperation {
         &self,
         target: &EvaluationTarget,
         src: &mut DataRecordRef<'_>,
-        dst: &DataRecord,
+        dst: &mut DataRecord,
     ) -> Option<FieldStorage> {
         self.extract_storage(target, src, dst)
     }
@@ -69,7 +69,7 @@ impl AsyncFieldExtractor for ArrOperation {
     async fn extract_more_async(
         &self,
         _src: &mut DataRecordRef<'_>,
-        _dst: &DataRecord,
+        _dst: &mut DataRecord,
         _cache: &mut FieldQueryCache,
     ) -> Vec<DataField> {
         Vec::new()

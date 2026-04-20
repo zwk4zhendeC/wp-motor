@@ -28,7 +28,10 @@ impl AsyncExpEvaluator for SingleEvalExp {
                 }
             }
         } else if let Some(target) = self.target().first()
-            && let Some(mut storage) = self.eval_way().extract_storage_async(target, src, dst).await
+            && let Some(mut storage) = self
+                .eval_way()
+                .extract_storage_async(target, src, dst)
+                .await
         {
             let needs_conversion =
                 target.data_type() != storage.get_meta() && target.data_type() != &DataType::Auto;

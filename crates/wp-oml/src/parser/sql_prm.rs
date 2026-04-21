@@ -154,10 +154,34 @@ fn is_supported_select_item(item: &str) -> bool {
     if inner.is_empty() {
         return false;
     }
+    if fn_name.eq_ignore_ascii_case("string_agg") {
+        return is_supported_string_agg_inner(inner);
+    }
     if let Some(rest) = inner.strip_prefix("distinct") {
         return is_sql_ident(rest.trim());
     }
     is_sql_ident(inner)
+}
+
+fn is_sql_string_literal(s: &str) -> bool {
+    let st = s.trim();
+    (st.starts_with('\'') && st.ends_with('\'') && st.len() >= 2)
+        || (st.starts_with('"') && st.ends_with('"') && st.len() >= 2)
+}
+
+fn is_supported_string_agg_inner(inner: &str) -> bool {
+    let Some(args) = split_top_level_commas(inner) else {
+        return false;
+    };
+    if args.len() != 2 {
+        return false;
+    }
+    let Some(first) = args[0].trim().strip_prefix("distinct") else {
+        return false;
+    };
+    let expr = first.trim();
+    let delimiter = args[1].trim();
+    is_sql_ident(expr) && is_sql_string_literal(delimiter)
 }
 
 /// Sanitize SQL body to ensure safe identifiers.
@@ -606,6 +630,59 @@ mod tests {
         );
         assert!(parsed.vars().contains_key("__sip"));
         assert!(parsed.vars().contains_key("__dip"));
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_oml_sql_string_agg_in_ref() -> ModalResult<()> {
+        super::set_sql_strict_for_test(Some(true));
+        let mut code = r#" select string_agg(distinct asset_type, ',') from v_asset_ip_details where ip in (@sip, @dip) ;"#;
+        let parsed = oml_sql.parse_next(&mut code)?;
+        assert_eq!(
+            parsed
+                .oml_sql()
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" "),
+            "select string_agg(distinct asset_type, ',') from v_asset_ip_details where ip IN (:sip, :dip)"
+        );
+        assert!(parsed.vars().contains_key("sip"));
+        assert!(parsed.vars().contains_key("dip"));
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_oml_sql_string_agg_in_take_refs() -> ModalResult<()> {
+        super::set_sql_strict_for_test(Some(true));
+        let mut code = r#" select string_agg(distinct asset_type, ',') from v_asset_ip_details where ip in (take(src_ip), take(dst_ip)) ;"#;
+        let parsed = oml_sql.parse_next(&mut code)?;
+        assert_eq!(
+            parsed
+                .oml_sql()
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" "),
+            "select string_agg(distinct asset_type, ',') from v_asset_ip_details where ip IN (:src_ip, :dst_ip)"
+        );
+        assert!(parsed.vars().contains_key("src_ip"));
+        assert!(parsed.vars().contains_key("dst_ip"));
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_oml_sql_string_agg_eq_bare_temp_ref() -> ModalResult<()> {
+        super::set_sql_strict_for_test(Some(true));
+        let mut code = r#" select string_agg(distinct asset_type, ',') from v_asset_ip_details where ip = __tsip ;"#;
+        let parsed = oml_sql.parse_next(&mut code)?;
+        assert_eq!(
+            parsed
+                .oml_sql()
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" "),
+            "select string_agg(distinct asset_type, ',') from v_asset_ip_details where ip = :ip"
+        );
+        assert!(parsed.vars().contains_key("ip"));
         Ok(())
     }
 

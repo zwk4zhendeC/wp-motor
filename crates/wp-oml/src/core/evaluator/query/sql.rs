@@ -4,6 +4,7 @@ use crate::language::SqlQuery;
 use async_trait::async_trait;
 use wp_knowledge::facade as kdb;
 use wp_model_core::model::FieldStorage;
+use wp_model_core::model::{DataType, Value};
 
 use crate::core::AsyncFieldExtractor;
 
@@ -12,12 +13,15 @@ use crate::core::AsyncFieldExtractor;
 const INLINE_SQL_LOCAL_CACHE_SCOPE: u64 = 0;
 
 fn norm_query_field(field: &DataField) -> DataField {
-    use wp_model_core::model::DataType;
     DataField::new(
         DataType::default(),
         field.clone_name(),
         field.get_value().clone(),
     )
+}
+
+fn null_query_field(name: &str) -> DataField {
+    DataField::new(DataType::default(), name.to_string(), Value::Null)
 }
 
 fn collect_sql_params(
@@ -28,11 +32,13 @@ fn collect_sql_params(
     let mut params = Vec::with_capacity(5);
     let target = EvaluationTarget::auto_default();
     for (v, acq) in query.vars() {
-        if let Some(storage) = acq.extract_storage(&target, src, dst) {
-            let mut tdo = storage.into_owned();
-            tdo.set_name(format!(":{}", v));
-            params.push(tdo);
-        }
+        let mut tdo = if let Some(storage) = acq.extract_storage(&target, src, dst) {
+            storage.into_owned()
+        } else {
+            null_query_field(format!(":{}", v).as_str())
+        };
+        tdo.set_name(format!(":{}", v));
+        params.push(tdo);
     }
     debug_kdb!("pararms:{:#?}", params);
     let sql = query.oml_sql().to_string();

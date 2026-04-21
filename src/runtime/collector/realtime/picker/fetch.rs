@@ -91,7 +91,7 @@ impl JMActPicker {
                 Some(batch) if !batch.is_empty() => {
                     if log::log_enabled!(target: "data", log::Level::Info) {
                         for v in &batch {
-                            info_edata!(
+                            debug_edata!(
                                 v.event_id,
                                 "[src:{}] => received  data: {}",
                                 source.identifier(),
@@ -192,7 +192,7 @@ impl JMActPicker {
                         Ok(batch) => {
                             if log::log_enabled!(target: "data", log::Level::Info) {
                                 for v in &batch {
-                                    info_edata!(
+                                    debug_edata!(
                                         v.event_id,
                                         "[{}] => received  data:{}",source.identifier(), v.payload
                                     );

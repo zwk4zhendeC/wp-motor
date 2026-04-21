@@ -203,7 +203,7 @@ impl SinkDispatcher {
                 };
                 if let Some((name, vec_back)) = payload {
                     self.unit_pool.recycle(vec_back);
-                    info_data!("sink {} send batch rec suc!", name);
+                    debug_data!("sink {} send batch rec suc!", name);
                 }
             }
             for leftover in per_sink_units.into_iter() {
